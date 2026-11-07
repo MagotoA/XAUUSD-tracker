@@ -188,7 +188,7 @@ body.locked main > :not(#unlock) { display: none; }
 
   function distinct(rows) { return new Set(rows.map(function (t) { return t.trade_id || t.id; })).size; }
   function stats(rows) {
-    var scored = rows.filter(function (t) { return !NOT_SCORED[t.status]; });
+    var scored = rows.filter(function (t) { return !NOT_SCORED[t.status] && !t.incomplete; });
     var closed = scored.filter(function (t) { return t.status === "closed"; });
     var rs = closed.map(function (t) { return t.r_multiple; }).filter(function (r) { return r != null; });
     var tpRates = [];
@@ -205,7 +205,7 @@ body.locked main > :not(#unlock) { display: none; }
       net: closed.reduce(function (a, t) { return a + (t.pnl_pips || 0); }, 0),
       avgR: rs.length ? rs.reduce(function (a, b) { return a + b; }, 0) / rs.length : null,
       flags: scored.filter(function (t) { return t.flag_count > 0; }).length,
-      noSl: distinct(rows.filter(function (t) { return t.status === "incomplete"; }))
+      noSl: distinct(rows.filter(function (t) { return t.incomplete || t.status === "incomplete"; }))
     };
   }
 
@@ -236,7 +236,7 @@ body.locked main > :not(#unlock) { display: none; }
         : (s.signals ? s.signals + " signals, none closed yet" : "No scored signals yet");
       var name = el("div", null, [el("span", { cls: "name", text: x.g }),
         s.flags ? el("span", { cls: "badge", title: "Signals the channel deleted or edited", text: s.flags + " red flag" + (s.flags > 1 ? "s" : "") }) : null,
-        s.noSl ? el("span", { cls: "badge", title: "Calls posted without a stop loss", text: s.noSl + " no SL" }) : null,
+        s.noSl ? el("span", { cls: "badge", title: "Calls missing an SL or TP that got no follow-up within 5 minutes; not scored", text: s.noSl + " incomplete" }) : null,
         el("div", { cls: "facts", text: facts })]);
       var bar = el("div", { cls: "bar", "aria-hidden": "true" }, [s.net ? el("span", { cls: s.net > 0 ? "pos" : "neg", style: "width:" + pct + "%" }) : null]);
       var pips = el("div", { cls: "pips " + (s.net > 0 ? "pos" : s.net < 0 ? "neg" : "") }, [
