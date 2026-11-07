@@ -139,6 +139,8 @@ td.flag { color: var(--loss); font-size: 13px; }
 select, input[type=search] { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
   border: 1px solid var(--rule-strong); border-radius: 6px; padding: 6px 10px; }
 input[type=search] { min-width: 220px; }
+input[type=date] { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong); border-radius: 6px; padding: 5px 8px; }
+label.datef { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
 button.action { border: 1px solid var(--rule-strong); background: var(--surface); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
 button.action:hover { border-color: var(--gold); }
 .back { margin-bottom: 10px; display: inline-block; }
@@ -191,7 +193,8 @@ body.locked main > :not(#unlock) { display: none; }
   function readState() {
     var p = new URLSearchParams(location.hash.slice(1));
     return { v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
-             s: p.get("s") || "totalR", d: p.get("d") !== "0", hc: p.get("hc") || "", ho: p.get("ho") || "", hs: p.get("hs") || "" };
+             s: p.get("s") || "totalR", d: p.get("d") !== "0", hc: p.get("hc") || "", ho: p.get("ho") || "", hs: p.get("hs") || "",
+             hf: p.get("hf") || "", ht: p.get("ht") || "", hb: p.get("hb") || "posted" };
   }
   var state = readState();
   function save() {
@@ -202,7 +205,8 @@ body.locked main > :not(#unlock) { display: none; }
     if (state.q) p.set("q", state.q);
     if (state.s !== "totalR") p.set("s", state.s);
     if (!state.d) p.set("d", "0");
-    ["hc", "ho", "hs"].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
+    ["hc", "ho", "hs", "hf", "ht"].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
+    if (state.hb !== "posted") p.set("hb", state.hb);
     history.replaceState(null, "", "#" + p.toString());
   }
   function go(changes, keepScroll) { Object.assign(state, changes); save(); render(); if (!keepScroll) window.scrollTo(0, 0); }
@@ -227,6 +231,11 @@ body.locked main > :not(#unlock) { display: none; }
     return n;
   }
   function when(iso) { return iso ? new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""; }
+  function dateOnly(iso) { return iso ? new Date(iso).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : ""; }
+  function timeOnly(iso) { return iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""; }
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function ymd(iso) { if (!iso) return ""; var d = new Date(iso); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+  function hm(iso) { if (!iso) return ""; var d = new Date(iso); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
   function day(ms) { return new Date(ms).toLocaleDateString([], { day: "numeric", month: "short" }); }
   function dur(min) {
     if (min == null) return "";
@@ -674,16 +683,22 @@ body.locked main > :not(#unlock) { display: none; }
   function filteredHistory() {
     var q = state.q.toLowerCase();
     return pool().filter(function (t) {
+      var dkey = ymd(state.hb === "fill" ? t.fill_at : t.posted_at);
+      if ((state.hf || state.ht) && !dkey) return false;
+      if (state.hf && dkey < state.hf) return false;
+      if (state.ht && dkey > state.ht) return false;
       return (!state.hc || t.grp === state.hc) && (!state.hs || t.side === state.hs) && (!state.ho || outcomeGroup(t) === state.ho || (state.ho === "Invalid" && isIncomplete(t))) &&
         (!q || [t.grp, t.outcome, t.entry, t.tp, t.raw, t.red_flags].join(" ").toLowerCase().indexOf(q) >= 0);
     }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : (a.leg || 0) - (b.leg || 0); });
   }
-  var HCOLS = ["Position", "Posted", "Channel", "Side", "Order type", "Entry", "SL", "TP", "Filled at", "Fill time", "Outcome", "Exit price",
-    "Exit time", "Time in trade", "Pips", "Cost (pips)", "R", "Max against", "Max in favour", "Session", "Source", "Red flags"];
+  var HCOLS = ["Position", "Posted date", "Posted time", "Channel", "Side", "Order type", "Entry", "SL", "TP", "Filled at", "Fill date", "Fill time",
+    "Outcome", "Exit price", "Exit time", "Time in trade", "Pips", "Cost (pips)", "R", "Max against", "Max in favour", "Session", "Source", "Red flags"];
   function hRow(t, plain) {
-    return [t.leg ? t.leg + " of " + t.legs : "", when(t.posted_at), t.grp, plain ? t.side : sideCell(t), t.order_type, t.entry,
-      t.sl_initial == null ? "none" : t.sl_initial, t.tp == null ? "none" : t.tp, t.fill_price, when(t.fill_at), t.outcome, t.exit_price,
-      when(t.exit_at), t.time_in_trade || "", plain ? t.pnl_pips : (t.pnl_pips == null ? "" : el("span", { cls: t.pnl_pips > 0 ? "win" : t.pnl_pips < 0 ? "loss" : "", text: signed(t.pnl_pips, 1) })),
+    return [t.leg ? t.leg + " of " + t.legs : "", plain ? ymd(t.posted_at) : dateOnly(t.posted_at), plain ? hm(t.posted_at) : timeOnly(t.posted_at),
+      t.grp, plain ? (t.side === "buy" ? "Buy" : "Sell") : sideCell(t), t.order_type, t.entry,
+      t.sl_initial == null ? "none" : t.sl_initial, t.tp == null ? "none" : t.tp, t.fill_price,
+      plain ? ymd(t.fill_at) : dateOnly(t.fill_at), plain ? hm(t.fill_at) : timeOnly(t.fill_at), t.outcome, t.exit_price,
+      plain ? (t.exit_at ? ymd(t.exit_at) + " " + hm(t.exit_at) : "") : when(t.exit_at), t.time_in_trade || "", plain ? t.pnl_pips : (t.pnl_pips == null ? "" : el("span", { cls: t.pnl_pips > 0 ? "win" : t.pnl_pips < 0 ? "loss" : "", text: signed(t.pnl_pips, 1) })),
       t.cost_pips, plain ? t.r_multiple : rCell(t.r_multiple), t.mae_pips, t.mfe_pips, t.session || "", t.source === "backfill" ? "Backfill" : "Live", t.red_flags || ""];
   }
   function viewHistory(v) {
@@ -701,16 +716,29 @@ body.locked main > :not(#unlock) { display: none; }
       var a = el("a", { href: URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })), download: "positions.csv" });
       document.body.appendChild(a); a.click(); a.remove();
     } } });
+    var dateIn = function (label, key) {
+      var i = el("input", { type: "date", "aria-label": label, value: state[key] });
+      i.addEventListener("change", function () { var c = {}; c[key] = i.value; go(c, true); });
+      return el("label", { cls: "datef" }, [el("span", { text: label }), i]);
+    };
+    var basis = el("select", { "aria-label": "Date to filter by", on: { change: function (e) { go({ hb: e.target.value }, true); } } },
+      [el("option", { value: "posted", text: "Posted date" }), el("option", { value: "fill", text: "Fill date" })]);
+    basis.value = state.hb;
+    var today = ymd(new Date().toISOString()), ago7 = ymd(new Date(Date.now() - 6 * 86400000).toISOString());
     v.appendChild(el("div", { cls: "filters" }, [
       sel("All channels", "hc", channels().map(function (c) { return [c, c]; })),
       sel("All outcomes", "ho", OUTCOMES.map(function (o) { return [o, o]; })),
       sel("Buy and sell", "hs", [["buy", "Buy"], ["sell", "Sell"]]), q, dl]));
+    v.appendChild(el("div", { cls: "filters" }, [basis, dateIn("From", "hf"), dateIn("To", "ht"),
+      el("button", { cls: "action", text: "Today", on: { click: function () { go({ hf: today, ht: today }, true); } } }),
+      el("button", { cls: "action", text: "Last 7 days", on: { click: function () { go({ hf: ago7, ht: today }, true); } } }),
+      (state.hf || state.ht) ? el("button", { cls: "link", text: "Clear dates", on: { click: function () { go({ hf: "", ht: "" }, true); } } }) : null]));
     var holder = el("div"), note = el("p", { cls: "note", style: "margin-top:10px" });
     v.appendChild(holder); v.appendChild(note);
     function drawTable() {
       var rows = filteredHistory(), shown = rows.slice(0, 400);
       holder.textContent = "";
-      holder.appendChild(shown.length ? table(HCOLS, shown.map(function (t) { return hRow(t, false); }), { num: [8, 11, 14, 15, 16, 17, 18], flag: [21], wrap: [21] })
+      holder.appendChild(shown.length ? table(HCOLS, shown.map(function (t) { return hRow(t, false); }), { num: [9, 13, 16, 17, 18, 19, 20], flag: [23], wrap: [23] })
         : empty(state.q ? "No positions match “" + state.q + "”. Clear the search to see all." : "No positions match these filters."));
       var hidden = LEGS.length - pool().length;
       note.textContent = (rows.length > 400 ? "Showing the latest 400 of " + rows.length + " positions. " : rows.length + " positions. ") +
