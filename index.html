@@ -6,92 +6,159 @@
 <title>Gold signal tracker</title>
 <style>
 :root {
-  --bg: #FAFBFC; --surface: #FFFFFF; --ink: #1B2430; --muted: #5B6675; --rule: #DDE2E8;
-  --gold: #9A6F06; --gold-soft: #F3E7C6; --win: #2E7D4F; --loss: #B3412F; --loss-soft: #F5DED9;
+  --bg: #F6F7F9; --surface: #FFFFFF; --ink: #17202B; --muted: #5B6675; --rule: #DCE1E7; --rule-strong: #C4CBD4;
+  --gold: #946A05; --gold-strong: #7A5703; --gold-soft: #F4E8C8; --win: #2B7A4B; --loss: #B23F2C; --loss-soft: #F6DFDA;
+  --chip: #EEF1F4;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #10151C; --surface: #161E28; --ink: #E8ECF1; --muted: #9AA6B4; --rule: #2A3542;
-    --gold: #E0B44C; --gold-soft: #3A3120; --win: #5BBF86; --loss: #E07A66; --loss-soft: #3B2421;
+    --bg: #0F141B; --surface: #161E28; --ink: #E7EBF0; --muted: #98A4B3; --rule: #273241; --rule-strong: #364354;
+    --gold: #E1B54D; --gold-strong: #F0C865; --gold-soft: #352C1A; --win: #5CC089; --loss: #E8806C; --loss-soft: #3A2320;
+    --chip: #1D2733;
     color-scheme: dark;
   }
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--ink);
+body { margin: 0; background: var(--bg); color: var(--ink);
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  font-size: 15px; line-height: 1.5; font-variant-numeric: tabular-nums;
-}
-main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
-h1 { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; font-weight: 650;
-     font-size: 30px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.01em; }
-h2 { font-size: 18px; font-weight: 650; margin: 0 0 4px; }
-.lede, .note { color: var(--muted); margin: 0; }
-.note { font-size: 13px; }
-header { display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: flex-end; justify-content: space-between;
-         padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
-label.toggle { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; color: var(--muted); }
-input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--gold); }
-section { margin-top: 36px; }
-.section-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
-button.link { background: none; border: 0; padding: 0; color: var(--gold); font: inherit; cursor: pointer; text-decoration: underline; }
+  font-size: 15px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+main { max-width: 1160px; margin: 0 auto; padding: 0 20px 72px; }
+h1 { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; font-weight: 700;
+     font-size: 28px; line-height: 1.1; margin: 0; letter-spacing: -0.015em; }
+h1 .mark { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--gold);
+     margin-right: 10px; vertical-align: 0.12em; box-shadow: 0 0 0 4px var(--gold-soft); }
+h2 { font-size: 17px; font-weight: 650; margin: 0; }
+h3 { font-size: 15px; font-weight: 650; margin: 0 0 8px; }
+p { margin: 0; }
+.note { color: var(--muted); font-size: 13px; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+button { font: inherit; color: inherit; }
+button.link { background: none; border: 0; padding: 0; color: var(--gold); cursor: pointer; text-decoration: underline; }
 
-/* Standings: the one bold element. A diverging bar per channel, centred on zero pips. */
-.standings { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
-.standings li { border-bottom: 1px solid var(--rule); }
-.standings button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; gap: 4px 20px; padding: 12px 8px;
-  grid-template-columns: minmax(240px, 2fr) minmax(140px, 1.2fr) 96px; align-items: center; }
-.standings button:hover { background: var(--surface); }
-.standings li.on button { background: var(--gold-soft); }
-.name { font-weight: 600; overflow-wrap: anywhere; }
+/* Top bar and navigation */
+header.top { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; justify-content: space-between; padding: 28px 0 14px; }
+.asof { color: var(--muted); font-size: 13px; margin-top: 6px; max-width: 72ch; }
+.controls { display: flex; gap: 18px; align-items: center; }
+label.toggle { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; color: var(--muted); font-size: 14px; }
+input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--gold); margin: 0; }
+nav.tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--rule);
+  display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 -20px; padding: 0 20px; }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { background: none; border: 0; padding: 12px 14px 11px; cursor: pointer; white-space: nowrap;
+  color: var(--muted); font-weight: 600; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+nav.tabs button:hover { color: var(--ink); }
+nav.tabs button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--gold); }
+nav.tabs .count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px;
+  background: var(--gold-soft); color: var(--gold-strong); font-size: 12px; text-align: center; }
+
+/* Layout pieces */
+.view { padding-top: 24px; }
+.scope { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 18px; }
+.scope .chip { background: var(--chip); border-radius: 999px; padding: 2px 10px; font-size: 13px; color: var(--muted); }
+section.block { margin-top: 32px; }
+.block-head { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 32px 40px; }
+.grid2 { margin-top: 32px; }
+.grid2 > section.block { margin-top: 0; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px; }
+.empty { color: var(--muted); padding: 14px 0; }
+
+/* KPI strip: one ruled row, not a card per number */
+dl.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); margin: 0;
+  border-top: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule); }
+dl.kpis > div { padding: 14px 16px 14px 0; }
+dl.kpis > div + div { padding-left: 16px; border-left: 1px solid var(--rule); }
+dl.kpis dt { color: var(--muted); font-size: 13px; }
+dl.kpis dd { margin: 2px 0 0; font-size: 24px; font-weight: 650; letter-spacing: -0.01em; }
+dd.pos { color: var(--win); } dd.neg { color: var(--loss); }
+@media (max-width: 640px) {
+  dl.kpis { grid-template-columns: repeat(2, 1fr); }
+  dl.kpis > div { padding: 12px 0 12px 0; border-left: 0 !important; padding-left: 0 !important; border-top: 1px solid var(--rule); }
+  dl.kpis > div:nth-child(-n+2) { border-top: 0; }
+  dl.kpis > div:nth-child(even) { padding-left: 14px !important; border-left: 1px solid var(--rule) !important; }
+}
+
+/* Leaderboard: the signature element. Total R per channel, a bar either side of zero. */
+ol.board { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule-strong); counter-reset: rank; }
+ol.board li { border-bottom: 1px solid var(--rule); }
+ol.board button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; gap: 4px 20px; padding: 13px 8px;
+  grid-template-columns: 28px minmax(220px, 2fr) minmax(140px, 1.3fr) 92px; align-items: center; }
+ol.board button:hover { background: var(--surface); }
+ol.board button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.rank { color: var(--muted); font-size: 13px; text-align: right; }
+.name { font-weight: 650; overflow-wrap: anywhere; }
 .facts { color: var(--muted); font-size: 13px; }
 .badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 12px; font-weight: 600;
-         background: var(--loss-soft); color: var(--loss); }
-.bar { position: relative; height: 14px; }
-.bar::before { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 1px solid var(--muted); opacity: .5; }
-.bar span { position: absolute; top: 0; height: 100%; border-radius: 2px; }
-.bar .pos { left: 50%; background: var(--gold); }
-.bar .neg { right: 50%; background: var(--loss); }
-.pips { text-align: right; font-weight: 650; font-size: 16px; }
-.pips.pos { color: var(--gold); } .pips.neg { color: var(--loss); }
-.early { color: var(--muted); font-weight: 400; font-size: 12px; display: block; }
+  background: var(--loss-soft); color: var(--loss); vertical-align: 1px; }
+.dbar { position: relative; height: 14px; }
+.dbar::before { content: ""; position: absolute; left: 50%; top: -5px; bottom: -5px; border-left: 1px solid var(--muted); opacity: .45; }
+.dbar span { position: absolute; top: 0; height: 100%; border-radius: 2px; }
+.dbar .pos { left: 50%; background: var(--gold); } .dbar .neg { right: 50%; background: var(--loss); }
+.big { text-align: right; font-weight: 700; font-size: 17px; }
+.big small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.big.pos { color: var(--gold); } .big.neg { color: var(--loss); }
 @media (max-width: 640px) {
-  .standings button { grid-template-columns: 1fr 88px; }
-  .standings .bar { grid-column: 1 / -1; grid-row: 2; }
+  ol.board button { grid-template-columns: 22px 1fr 78px; }
+  ol.board .dbar { grid-column: 2 / 4; grid-row: 2; }
 }
 
-.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+/* Bars (HTML) */
+.bars { display: grid; gap: 8px; }
+.bars .row { display: grid; grid-template-columns: minmax(96px, 150px) 1fr 76px; gap: 10px; align-items: center; font-size: 14px; }
+.bars .lab { overflow-wrap: anywhere; } .bars .lab small { color: var(--muted); display: block; font-size: 12px; }
+.bars .track { position: relative; height: 12px; background: var(--chip); border-radius: 3px; }
+.bars .track.div::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; border-left: 1px solid var(--muted); opacity: .5; }
+.bars .fill { position: absolute; top: 0; height: 100%; border-radius: 3px; background: var(--gold); }
+.bars .fill.neg { background: var(--loss); }
+.bars .val { text-align: right; font-weight: 600; }
+svg { display: block; width: 100%; height: auto; }
+svg text { fill: var(--muted); font-size: 12px; font-family: inherit; }
+.chart { min-height: 40px; }
+svg .grid { stroke: var(--rule); stroke-width: 1; }
+svg .zero { stroke: var(--muted); stroke-dasharray: 4 4; stroke-width: 1; }
+
+/* Tables */
+.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
-th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; }
-#hist td:last-child { white-space: normal; min-width: 240px; color: var(--loss); font-size: 13px; }
-th { color: var(--muted); font-weight: 600; font-size: 13px; }
+th, td { padding: 9px 11px; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; background: var(--surface); }
+th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: var(--ink); }
+th[aria-sort] { color: var(--ink); }
 td.num, th.num { text-align: right; }
 tr:last-child td { border-bottom: 0; }
+tbody tr.click { cursor: pointer; } tbody tr.click:hover td { background: var(--chip); }
+td.wrap { white-space: normal; min-width: 220px; }
+td.flag { color: var(--loss); font-size: 13px; }
 .buy { color: var(--win); font-weight: 600; } .sell { color: var(--loss); font-weight: 600; }
 .win { color: var(--win); } .loss { color: var(--loss); }
-.empty { padding: 20px; color: var(--muted); }
-svg text { fill: var(--muted); font-size: 12px; }
-input[type=search] { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--rule);
-  border-radius: 6px; padding: 6px 10px; min-width: 220px; }
-@media (prefers-reduced-motion: no-preference) { .standings li { transition: background .15s; } }
+
+/* Filters */
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+select, input[type=search] { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--rule-strong); border-radius: 6px; padding: 6px 10px; }
+input[type=search] { min-width: 220px; }
+button.action { border: 1px solid var(--rule-strong); background: var(--surface); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button.action:hover { border-color: var(--gold); }
+.back { margin-bottom: 10px; display: inline-block; }
+
+/* Unlock screen (website) */
 body.locked main > :not(#unlock) { display: none; }
-#unlock { max-width: 420px; margin: 12vh auto 0; }
-#unlock p { color: var(--muted); }
+#unlock { max-width: 420px; margin: 14vh auto 0; }
+#unlock p { color: var(--muted); margin-top: 8px; }
 #unlock input[type=password] { display: block; width: 100%; font: inherit; color: var(--ink); background: var(--surface);
-  border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; margin: 16px 0 12px; }
-#unlock button[type=submit] { font: inherit; font-weight: 600; color: #fff; background: var(--gold); border: 0;
+  border: 1px solid var(--rule-strong); border-radius: 6px; padding: 10px 12px; margin: 16px 0 12px; }
+#unlock button[type=submit] { font-weight: 600; color: var(--surface); background: var(--gold); border: 0;
   border-radius: 6px; padding: 10px 18px; margin-top: 16px; cursor: pointer; }
-#unlock button[type=submit] { color: var(--surface); }
 #unlock .error { color: var(--loss); min-height: 1.5em; }
+@media (prefers-reduced-motion: no-preference) { ol.board li button, nav.tabs button { transition: background .15s, color .15s; } }
 </style>
 </head>
 <body class="locked">
 <main>
   <form id="unlock" hidden>
-    <h1>Gold signal tracker</h1>
+    <h1><span class="mark" aria-hidden="true"></span>Gold signal tracker</h1>
     <p>Enter your password to open the dashboard.</p>
     <label for="pw" class="note">Password</label>
     <input type="password" id="pw" autocomplete="current-password" required>
@@ -99,272 +166,593 @@ body.locked main > :not(#unlock) { display: none; }
     <br><button type="submit" id="open">Open dashboard</button>
     <p class="error" id="unlock-error" role="alert"></p>
   </form>
-  <header>
+  <header class="top">
     <div>
-      <h1>Gold signal tracker</h1>
-      <p class="lede" id="asof"></p>
+      <h1><span class="mark" aria-hidden="true"></span>Gold signal tracker</h1>
+      <p class="asof" id="asof"></p>
     </div>
-    <div>
-      <label class="toggle"><input type="checkbox" id="bf"> Include backfill (rough preview)</label>
+    <div class="controls">
+      <label class="toggle"><input type="checkbox" id="bf"> Include backfill</label>
       <button class="link" id="lock" hidden>Lock</button>
     </div>
   </header>
-
-  <section aria-labelledby="h-standings">
-    <div class="section-head">
-      <div>
-        <h2 id="h-standings">Channel standings</h2>
-        <p class="note" id="standings-note"></p>
-      </div>
-      <button class="link" id="clear" hidden>Show all channels</button>
-    </div>
-    <ul class="standings" id="standings"></ul>
-  </section>
-
-  <section aria-labelledby="h-live">
-    <div class="section-head"><h2 id="h-live">Live now</h2><p class="note">Open trades and signals waiting for their entry price.</p></div>
-    <div class="scroll" id="live"></div>
-  </section>
-
-  <section aria-labelledby="h-curve">
-    <div class="section-head"><h2 id="h-curve">Cumulative pips</h2><p class="note" id="curve-note"></p></div>
-    <div class="scroll" id="curve"></div>
-  </section>
-
-  <section aria-labelledby="h-hist">
-    <div class="section-head">
-      <h2 id="h-hist">Trade history</h2>
-      <input type="search" id="q" placeholder="Search outcome, entry, message…" aria-label="Search trades">
-    </div>
-    <div class="scroll" id="hist"></div>
-    <p class="note" id="hist-note"></p>
-  </section>
+  <nav class="tabs" id="nav" aria-label="Dashboard sections"></nav>
+  <div class="view" id="view"></div>
 </main>
 
 <script>
 (function () {
   "use strict";
-  var DATA = { trades: [] }, trades = [], NOTE = "";
-  var NOT_SCORED = { incomplete: 1, superseded: 1 };
+  var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], NOTE = "";
+  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["analytics", "Analytics"], ["history", "History"]];
+  var OUTCOMES = ["TP hit", "Stop loss", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
-  // State lives in the address (#g=…&bf=1&q=…) so it survives the automatic reload.
+  // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
   function readState() {
     var p = new URLSearchParams(location.hash.slice(1));
-    return { g: p.get("g") || "", bf: p.get("bf") === "1", q: p.get("q") || "" };
-  }
-  function writeState(s) {
-    var p = new URLSearchParams();
-    if (s.g) p.set("g", s.g);
-    if (s.bf) p.set("bf", "1");
-    if (s.q) p.set("q", s.q);
-    history.replaceState(null, "", "#" + p.toString());
+    return { v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
+             s: p.get("s") || "totalR", d: p.get("d") !== "0", hc: p.get("hc") || "", ho: p.get("ho") || "", hs: p.get("hs") || "" };
   }
   var state = readState();
+  function save() {
+    var p = new URLSearchParams();
+    if (state.v !== "overview") p.set("v", state.v);
+    if (state.c) p.set("c", state.c);
+    if (state.bf) p.set("bf", "1");
+    if (state.q) p.set("q", state.q);
+    if (state.s !== "totalR") p.set("s", state.s);
+    if (!state.d) p.set("d", "0");
+    ["hc", "ho", "hs"].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
+    history.replaceState(null, "", "#" + p.toString());
+  }
+  function go(changes, keepScroll) { Object.assign(state, changes); save(); render(); if (!keepScroll) window.scrollTo(0, 0); }
 
+  // ---------- small helpers ----------
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
-    if (attrs) for (var k in attrs) {
+    if (attrs) Object.keys(attrs).forEach(function (k) {
       if (k === "text") n.textContent = attrs[k];
       else if (k === "cls") n.className = attrs[k];
-      else n.setAttribute(k, attrs[k]);
-    }
-    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+      else if (k === "on") Object.keys(attrs.on).forEach(function (e) { n.addEventListener(e, attrs.on[e]); });
+      else if (attrs[k] != null) n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" || typeof c === "number" ? document.createTextNode(String(c)) : c); });
     return n;
   }
-  function when(iso) {
-    if (!iso) return "";
-    return new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  var NS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, text) {
+    var n = document.createElementNS(NS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+    if (text != null) n.textContent = text;
+    return n;
   }
-  function ago(iso) {
-    var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-    if (m < 60) return m + " min";
-    if (m < 48 * 60) return Math.round(m / 60) + " h";
-    return Math.round(m / 1440) + " days";
+  function when(iso) { return iso ? new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""; }
+  function day(ms) { return new Date(ms).toLocaleDateString([], { day: "numeric", month: "short" }); }
+  function dur(min) {
+    if (min == null) return "";
+    min = Math.max(0, Math.round(min));
+    var d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60;
+    return (d ? d + "d " : "") + (h || d ? h + "h " : "") + m + "m";
   }
-  function fmt(x, d) { return x == null ? "" : Number(x).toFixed(d == null ? 1 : d); }
-  function signed(x, d) { return x == null ? "" : (x > 0 ? "+" : "") + fmt(x, d); }
-
-  function pool() { return trades.filter(function (t) { return state.bf || t.source !== "backfill"; }); }
-
-  function distinct(rows) { return new Set(rows.map(function (t) { return t.trade_id || t.id; })).size; }
-  function stats(rows) {
-    var scored = rows.filter(function (t) { return !NOT_SCORED[t.status] && !t.incomplete; });
-    var closed = scored.filter(function (t) { return t.status === "closed"; });
-    var rs = closed.map(function (t) { return t.r_multiple; }).filter(function (r) { return r != null; });
-    var tpRates = [];
-    for (var i = 1; i <= 4; i++) {
-      var at = closed.filter(function (t) { return t.leg === i && t.tp != null; });
-      if (at.length) tpRates.push("TP" + i + " " + Math.round(at.filter(function (t) { return t.exit_reason === "tp"; }).length / at.length * 100) + "%");
-    }
-    return {
-      signals: distinct(scored),
-      positions: scored.length,
-      tpRates: tpRates,
-      closed: closed.length,
-      wins: closed.filter(function (t) { return t.result === "win"; }).length,
-      net: closed.reduce(function (a, t) { return a + (t.pnl_pips || 0); }, 0),
-      avgR: rs.length ? rs.reduce(function (a, b) { return a + b; }, 0) / rs.length : null,
-      flags: scored.filter(function (t) { return t.flag_count > 0; }).length,
-      noSl: distinct(rows.filter(function (t) { return t.incomplete || t.status === "incomplete"; }))
-    };
-  }
-
-  function renderHeader() {
-    var asof = DATA.generated_at ? when(DATA.generated_at) : "unknown";
-    var c = DATA.costs_usd_per_oz || {};
-    document.getElementById("asof").textContent =
-      "Data as of " + asof + ". Results are after costs ($" + fmt(c.spread, 2) + " spread, $" + fmt(c.slippage, 2) +
-      " slippage per oz). " + NOTE;
-    document.getElementById("bf").checked = state.bf;
-  }
-
-  function renderStandings() {
-    var rows = pool();
-    var groups = Array.from(new Set(trades.map(function (t) { return t.grp; })));
-    var list = groups.map(function (g) { return { g: g, s: stats(rows.filter(function (t) { return t.grp === g; })) }; })
-      .sort(function (a, b) { return b.s.net - a.s.net || b.s.closed - a.s.closed; });
-    var max = Math.max(1, Math.max.apply(null, list.map(function (x) { return Math.abs(x.s.net); })));
-    var ul = document.getElementById("standings");
-    ul.textContent = "";
-    list.forEach(function (x) {
-      var s = x.s, pct = Math.abs(s.net) / max * 50;
-      var facts = s.closed
-        ? s.signals + " signals (" + s.positions + " positions), " + s.closed + " closed, " + Math.round(s.wins / s.closed * 100) + "% wins" +
-          (s.avgR != null ? ", avg " + fmt(s.avgR, 2) + "R" : "") + ". " +
-          (s.tpRates.length ? "Hit rate: " + s.tpRates.join(", ") + ". " : "") +
-          (s.closed < 30 ? "Too early to judge." : "")
-        : (s.signals ? s.signals + " signals, none closed yet" : "No scored signals yet");
-      var name = el("div", null, [el("span", { cls: "name", text: x.g }),
-        s.flags ? el("span", { cls: "badge", title: "Signals the channel deleted or edited", text: s.flags + " red flag" + (s.flags > 1 ? "s" : "") }) : null,
-        s.noSl ? el("span", { cls: "badge", title: "Calls missing an SL or TP that got no follow-up within 5 minutes; not scored", text: s.noSl + " incomplete" }) : null,
-        el("div", { cls: "facts", text: facts })]);
-      var bar = el("div", { cls: "bar", "aria-hidden": "true" }, [s.net ? el("span", { cls: s.net > 0 ? "pos" : "neg", style: "width:" + pct + "%" }) : null]);
-      var pips = el("div", { cls: "pips " + (s.net > 0 ? "pos" : s.net < 0 ? "neg" : "") }, [
-        s.closed ? signed(s.net, 0) : "–",
-        el("span", { cls: "early", text: s.closed ? "pips" : "" })]);
-      var btn = el("button", { "aria-pressed": String(state.g === x.g) }, [name, bar, pips]);
-      btn.addEventListener("click", function () { state.g = state.g === x.g ? "" : x.g; writeState(state); renderAll(); });
-      ul.appendChild(el("li", { cls: state.g === x.g ? "on" : "" }, [btn]));
-    });
-    document.getElementById("standings-note").textContent = state.bf
-      ? "Includes backfilled signals: a rough preview only, since channels may have deleted old losing calls."
-      : "Live-logged signals only. Each TP counts as its own position. Judge a channel after at least 30 closed positions.";
-    document.getElementById("clear").hidden = !state.g;
-  }
-
-  function table(head, rows, numCols) {
-    var t = el("table", null, [el("thead", null, [el("tr", null, head.map(function (h, i) {
-      return el("th", { cls: numCols.indexOf(i) >= 0 ? "num" : "", text: h }); }))])]);
-    var tb = el("tbody");
-    rows.forEach(function (r) { tb.appendChild(el("tr", null, r.map(function (c, i) {
-      return c instanceof Node ? el("td", { cls: numCols.indexOf(i) >= 0 ? "num" : "" }, [c])
-                              : el("td", { cls: numCols.indexOf(i) >= 0 ? "num" : "", text: c == null ? "" : String(c) }); }))); });
-    t.appendChild(tb);
-    return t;
+  function fmt(x, d) { return x == null || isNaN(x) ? "–" : Number(x).toFixed(d == null ? 1 : d); }
+  function signed(x, d) { return x == null || isNaN(x) ? "–" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(d == null ? 1 : d); }
+  function pct(a, b) { return b ? Math.round(a / b * 100) + "%" : "–"; }
+  function sum(a) { return a.reduce(function (s, x) { return s + (x || 0); }, 0); }
+  function median(a) { if (!a.length) return null; var b = a.slice().sort(function (x, y) { return x - y; }); var m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
+  function byExit(a, b) { return (a.exit_at || "") < (b.exit_at || "") ? -1 : (a.exit_at || "") > (b.exit_at || "") ? 1 : 0; }
+  function cls(x) { return x > 0 ? "pos" : x < 0 ? "neg" : ""; }
+  function empty(text) { return el("p", { cls: "empty", text: text }); }
+  function block(title, note, body, extra) {
+    return el("section", { cls: "block" }, [el("div", { cls: "block-head" }, [el("h2", { text: title }), note ? el("p", { cls: "note", text: note }) : null, extra || null]), body]);
   }
   function sideCell(t) { return el("span", { cls: t.side, text: t.side === "buy" ? "Buy" : "Sell" }); }
-  function tpOf(t) { return t.leg ? (t.tp == null ? "none" : t.tp) : (t.tp_text || "none"); }
-  function posOf(t) { return t.leg ? t.leg + " of " + t.legs : ""; }
-
-  function renderLive() {
-    var rows = pool().filter(function (t) { return (t.status === "open" || t.status === "pending") && (!state.g || t.grp === state.g); })
-      .sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
-    var box = document.getElementById("live");
-    box.textContent = "";
-    if (!rows.length) { box.appendChild(el("p", { cls: "empty", text: "Nothing open right now. New signals appear here as soon as a channel posts one." })); return; }
-    box.appendChild(table(["Channel", "Side", "Entry", "SL", "TP", "Position", "Status", "Filled at", "For"],
-      rows.map(function (t) { return [t.grp, sideCell(t), t.entry, t.sl_initial == null ? "none" : t.sl_initial, tpOf(t), posOf(t), t.outcome,
-        t.fill_price, ago(t.fill_at || t.posted_at)]; }), [7, 8]));
+  function rCell(r) { return r == null ? "" : el("span", { cls: r > 0 ? "win" : r < 0 ? "loss" : "", text: signed(r, 2) }); }
+  function outcomeGroup(t) {
+    if (t.status === "closed") return { tp: "TP hit", sl: "Stop loss", breakeven: "Breakeven stop", manual: "Closed by channel", timeout: "Timed out" }[t.exit_reason] || "Closed";
+    if (t.status === "open") return "Open";
+    if (t.status === "pending") return "Waiting for entry";
+    if (t.status === "not_filled") return "Not filled";
+    return "Invalid";
   }
 
-  function renderCurve() {
-    var rows = pool().filter(function (t) { return t.status === "closed" && t.exit_at; })
-      .sort(function (a, b) { return a.exit_at < b.exit_at ? -1 : 1; });
-    var box = document.getElementById("curve");
-    box.textContent = "";
-    document.getElementById("curve-note").textContent = state.g ? "Highlighting " + state.g + "." : "Select a channel in the standings to highlight it.";
-    if (!rows.length) { box.appendChild(el("p", { cls: "empty", text: "The curve starts once trades close." })); return; }
-    var t0 = new Date(rows[0].exit_at).getTime(), t1 = new Date(rows[rows.length - 1].exit_at).getTime() || t0 + 1;
-    var series = {}, lo = 0, hi = 0;
-    rows.forEach(function (t) {
-      var s = series[t.grp] || (series[t.grp] = { pts: [[t0, 0]], v: 0 });
-      s.v += t.pnl_pips || 0; s.pts.push([new Date(t.exit_at).getTime(), s.v]);
-      lo = Math.min(lo, s.v); hi = Math.max(hi, s.v);
+  // ---------- data ----------
+  function pool() { return LEGS.filter(function (t) { return state.bf || t.source !== "backfill"; }); }
+  function sigPool() { return SIGS.filter(function (t) { return state.bf || t.source !== "backfill"; }); }
+  function isIncomplete(t) { return t.incomplete || t.status === "incomplete"; }
+  function isScored(t) { return !isIncomplete(t) && t.status !== "superseded"; }
+  function distinct(rows) { return new Set(rows.map(function (t) { return t.trade_id || t.id; })).size; }
+  function channels() { return Array.from(new Set(LEGS.map(function (t) { return t.grp; }))).sort(); }
+
+  function metrics(rows) {
+    var sc = rows.filter(isScored);
+    var closed = sc.filter(function (t) { return t.status === "closed"; }).sort(byExit);
+    var rs = closed.map(function (t) { return t.r_multiple; }).filter(function (r) { return r != null; });
+    var cum = 0, peak = 0, dd = 0, run = 0, worst = 0;
+    closed.forEach(function (t) {
+      cum += t.r_multiple || 0; peak = Math.max(peak, cum); dd = Math.max(dd, peak - cum);
+      if (t.result === "loss") { run++; worst = Math.max(worst, run); } else if (t.result === "win") run = 0;
     });
-    var W = 1000, H = 260, L = 56, R = 16, T = 16, B = 28;
-    var x = function (ms) { return L + (W - L - R) * (ms - t0) / Math.max(1, t1 - t0); };
-    var y = function (v) { return T + (H - T - B) * (hi - v) / Math.max(1, hi - lo); };
-    var ns = "http://www.w3.org/2000/svg";
-    var svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("width", "100%"); svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Cumulative pips after costs by channel over time");
-    svg.style.minWidth = "560px"; svg.style.display = "block";
-    function line(x1, y1, x2, y2, color, w, dash) {
-      var l = document.createElementNS(ns, "line");
-      [["x1", x1], ["y1", y1], ["x2", x2], ["y2", y2], ["stroke", color], ["stroke-width", w]].forEach(function (a) { l.setAttribute(a[0], a[1]); });
-      if (dash) l.setAttribute("stroke-dasharray", dash);
-      svg.appendChild(l);
+    var gw = sum(rs.filter(function (r) { return r > 0; })), gl = -sum(rs.filter(function (r) { return r < 0; }));
+    var tp = [];
+    for (var i = 1; i <= 6; i++) {
+      var at = closed.filter(function (t) { return t.leg === i && t.tp != null; });
+      if (at.length) tp.push({ n: i, hit: at.filter(function (t) { return t.exit_reason === "tp"; }).length, of: at.length });
     }
-    function text(tx, ty, s, anchor) {
-      var t = document.createElementNS(ns, "text");
-      t.setAttribute("x", tx); t.setAttribute("y", ty); t.setAttribute("text-anchor", anchor || "end"); t.textContent = s;
-      svg.appendChild(t);
+    var mins = closed.map(function (t) { return t.minutes_in_trade; }).filter(function (m) { return m != null; });
+    var waited = sc.filter(function (t) { return t.status === "not_filled" || t.status === "closed" || t.status === "open"; });
+    return {
+      signals: distinct(sc), positions: sc.length, closed: closed.length,
+      wins: closed.filter(function (t) { return t.result === "win"; }).length,
+      losses: closed.filter(function (t) { return t.result === "loss"; }).length,
+      totalR: sum(rs), avgR: rs.length ? sum(rs) / rs.length : null, pips: sum(closed.map(function (t) { return t.pnl_pips; })),
+      pf: gl ? gw / gl : (gw ? Infinity : null), maxDD: dd, streak: worst, tp: tp,
+      avgMin: mins.length ? sum(mins) / mins.length : null,
+      notFilled: sc.filter(function (t) { return t.status === "not_filled"; }).length, waited: waited.length,
+      invalid: distinct(sc.filter(function (t) { return t.status === "invalid"; })),
+      incomplete: distinct(rows.filter(isIncomplete)),
+      flags: distinct(sc.filter(function (t) { return t.flag_count > 0; })),
+      open: sc.filter(function (t) { return t.status === "open"; }).length,
+      pending: sc.filter(function (t) { return t.status === "pending"; }).length,
+      gross: sum(closed.map(function (t) { return t.r_gross; })), costPips: sum(closed.map(function (t) { return t.cost_pips; }))
+    };
+  }
+  function pfText(pf) { return pf == null ? "–" : pf === Infinity ? "∞" : fmt(pf, 2); }
+
+  // ---------- charts ----------
+  var POST = [];
+  // Charts are drawn after the view is on the page, at its real width, so text stays readable.
+  function chart(draw) {
+    var box = el("div", { cls: "chart" });
+    POST.push(function () { box.appendChild(draw(Math.max(260, Math.floor(box.clientWidth)))); });
+    return box;
+  }
+  function plural(n, w) { return n + " " + w + (n === 1 ? "" : "s"); }
+  function niceStep(span) {
+    var raw = span / 4, mag = Math.pow(10, Math.floor(Math.log10(raw || 1))), n = raw / mag;
+    return (n > 5 ? 10 : n > 2 ? 5 : n > 1 ? 2 : 1) * mag;
+  }
+  function lineChart(series, o, W) {
+    o = o || {};
+    var pts = [].concat.apply([], series.map(function (s) { return s.pts; }));
+    if (pts.length < 2) return empty(o.emptyText || "The chart starts once positions close.");
+    W = W || 800;
+    var H = o.h || Math.round(Math.min(300, Math.max(200, W * 0.45))), L = 50, R = 58, T = 14, B = 28;
+    var x0 = Math.min.apply(null, pts.map(function (p) { return p[0]; })), x1 = Math.max.apply(null, pts.map(function (p) { return p[0]; }));
+    var ys = pts.map(function (p) { return p[1]; }).concat([0]);
+    var y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    if (x1 === x0) x1 = x0 + 1;
+    if (y1 === y0) { y1 += 1; y0 -= 1; }
+    var step = niceStep(y1 - y0); y0 = Math.floor(y0 / step) * step; y1 = Math.ceil(y1 / step) * step;
+    var X = function (v) { return L + (W - L - R) * (v - x0) / (x1 - x0); }, Y = function (v) { return T + (H - T - B) * (y1 - v) / (y1 - y0); };
+    var g = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": o.label || "Line chart" });
+    for (var v = y0; v <= y1 + 1e-9; v += step) {
+      g.appendChild(sv("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), "class": Math.abs(v) < 1e-9 ? "zero" : "grid" }));
+      g.appendChild(sv("text", { x: L - 8, y: Y(v) + 4, "text-anchor": "end" }, (v > 0 ? "+" : "") + (Math.abs(v) < 1e-9 ? "0" : +v.toFixed(2)) + (o.unit || "")));
     }
-    line(L, y(0), W - R, y(0), "var(--muted)", 1, "4 4");
-    text(L - 6, y(hi) + 4, signed(hi, 0)); text(L - 6, y(0) + 4, "0"); if (lo < 0) text(L - 6, y(lo) + 4, signed(lo, 0));
-    text(L, H - 8, when(rows[0].exit_at), "start"); text(W - R, H - 8, when(rows[rows.length - 1].exit_at), "end");
-    var names = Object.keys(series).sort(function (a) { return a === state.g ? 1 : -1; });
-    names.forEach(function (g) {
-      var p = document.createElementNS(ns, "polyline");
-      p.setAttribute("points", series[g].pts.map(function (q) { return x(q[0]).toFixed(1) + "," + y(q[1]).toFixed(1); }).join(" "));
-      p.setAttribute("fill", "none");
-      var on = !state.g || g === state.g;
-      p.setAttribute("stroke", g === state.g ? "var(--gold)" : "var(--muted)");
-      p.setAttribute("stroke-width", g === state.g ? 3 : 1.5);
-      p.setAttribute("opacity", on ? (g === state.g ? 1 : 0.55) : 0.2);
-      var title = document.createElementNS(ns, "title"); title.textContent = g + ": " + signed(series[g].v, 0) + " pips";
-      p.appendChild(title);
-      svg.appendChild(p);
+    [x0, (x0 + x1) / 2, x1].forEach(function (t, i) {
+      g.appendChild(sv("text", { x: X(t), y: H - 8, "text-anchor": i === 0 ? "start" : i === 2 ? "end" : "middle" }, day(t)));
     });
-    box.appendChild(svg);
+    series.slice().sort(function (a, b) { return (a.strong ? 1 : 0) - (b.strong ? 1 : 0); }).forEach(function (s) {
+      if (s.pts.length < 1) return;
+      var line = sv("polyline", { points: s.pts.map(function (p) { return X(p[0]).toFixed(1) + "," + Y(p[1]).toFixed(1); }).join(" "),
+        fill: "none", stroke: s.color || "var(--muted)", "stroke-width": s.strong ? 3 : 1.5, opacity: s.strong ? 1 : (s.opacity || 0.45),
+        "stroke-linejoin": "round" });
+      line.appendChild(sv("title", null, s.name + ": " + signed(s.pts[s.pts.length - 1][1], 1) + (o.unit || "")));
+      g.appendChild(line);
+      if (s.strong) {
+        var last = s.pts[s.pts.length - 1];
+        g.appendChild(sv("text", { x: X(last[0]) + 6, y: Y(last[1]) + 4, "text-anchor": "start", style: "fill: var(--ink); font-weight: 600" },
+          signed(last[1], 1) + (o.unit || "")));
+      }
+    });
+    return g;
+  }
+  function cumulative(rows) {
+    var c = 0;
+    return rows.slice().sort(byExit).filter(function (t) { return t.exit_at; }).map(function (t) { c += t.r_multiple || 0; return [new Date(t.exit_at).getTime(), c]; });
+  }
+  function bars(items, o) {
+    o = o || {};
+    if (!items.length) return empty(o.emptyText || "Not enough closed positions yet.");
+    var div = o.diverging, max = Math.max.apply(null, items.map(function (i) { return Math.abs(i.value || 0); })) || 1;
+    if (o.max) max = o.max;
+    return el("div", { cls: "bars" }, items.map(function (i) {
+      var w = Math.abs(i.value || 0) / max * (div ? 50 : 100);
+      var style = div ? (i.value >= 0 ? "left:50%;width:" + w + "%" : "right:50%;width:" + w + "%") : "left:0;width:" + w + "%";
+      return el("div", { cls: "row" }, [
+        el("div", { cls: "lab" }, [i.label, i.sub ? el("small", { text: i.sub }) : null]),
+        el("div", { cls: "track" + (div ? " div" : "") }, [el("div", { cls: "fill" + (i.value < 0 || i.bad ? " neg" : ""), style: style })]),
+        el("div", { cls: "val" + (div ? (i.value > 0 ? " win" : i.value < 0 ? " loss" : "") : ""), text: o.fmt ? o.fmt(i.value, i) : String(i.value) })]);
+    }));
+  }
+  function columns(items, o, W) {
+    o = o || {};
+    if (!items.some(function (i) { return i.n; })) return empty(o.emptyText || "Not enough closed positions yet.");
+    W = W || 800;
+    var H = o.h || 210, L = 6, R = 6, T = 22, B = 28, n = items.length, gap = Math.max(2, Math.min(8, W / n / 6));
+    var vals = items.map(function (i) { return i.value || 0; });
+    var hi = Math.max(0, Math.max.apply(null, vals)), lo = Math.min(0, Math.min.apply(null, vals));
+    if (hi === lo) hi = 1;
+    var Y = function (v) { return T + (H - T - B) * (hi - v) / (hi - lo); }, bw = (W - L - R) / n;
+    var g = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": o.label || "Column chart" });
+    g.appendChild(sv("line", { x1: L, x2: W - R, y1: Y(0), y2: Y(0), "class": "zero" }));
+    items.forEach(function (it, k) {
+      var x = L + k * bw + gap / 2, v = it.value || 0, y = Math.min(Y(v), Y(0)), h = Math.abs(Y(v) - Y(0));
+      if (it.n) {
+        var r = sv("rect", { x: x, y: y, width: Math.max(1, bw - gap), height: Math.max(h, 1), rx: 2,
+          fill: it.color || (v < 0 ? "var(--loss)" : "var(--gold)"), opacity: it.n < (o.minN || 0) ? 0.35 : 1 });
+        r.appendChild(sv("title", null, it.label + ": " + (o.fmt ? o.fmt(v) : v) + (it.n != null ? " (" + it.n + " positions)" : "")));
+        g.appendChild(r);
+        if (o.showValues) g.appendChild(sv("text", { x: x + (bw - gap) / 2, y: v >= 0 ? y - 5 : y + h + 14, "text-anchor": "middle" }, o.fmt ? o.fmt(v) : String(v)));
+      }
+      if (!o.labelEvery || k % o.labelEvery === 0) g.appendChild(sv("text", { x: x + (bw - gap) / 2, y: H - 8, "text-anchor": "middle" }, it.label));
+    });
+    return g;
+  }
+  function scatter(rows, W) {
+    var pts = rows.filter(function (t) { return t.status === "closed" && t.mae_pips != null && t.mfe_pips != null; });
+    if (pts.length < 3) return empty("Needs a few closed positions.");
+    W = W || 800;
+    var H = Math.round(Math.min(320, Math.max(220, W * 0.55))), L = 48, R = 30, T = 14, B = 40;
+    var xm = Math.max.apply(null, pts.map(function (t) { return t.mae_pips; })) || 1, ym = Math.max.apply(null, pts.map(function (t) { return t.mfe_pips; })) || 1;
+    var sx = niceStep(xm), sy = niceStep(ym); xm = Math.ceil(xm / sx) * sx; ym = Math.ceil(ym / sy) * sy;
+    var X = function (v) { return L + (W - L - R) * v / xm; }, Y = function (v) { return T + (H - T - B) * (1 - v / ym); };
+    var g = sv("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Max against versus max in favour, in pips, per closed position" });
+    for (var v = 0; v <= ym + 1e-9; v += sy) { g.appendChild(sv("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), "class": "grid" })); g.appendChild(sv("text", { x: L - 8, y: Y(v) + 4, "text-anchor": "end" }, +v.toFixed(1))); }
+    for (var u = 0; u <= xm + 1e-9; u += sx) g.appendChild(sv("text", { x: X(u), y: H - 22, "text-anchor": "middle" }, +u.toFixed(1)));
+    g.appendChild(sv("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle" }, "Max against (pips) →"));
+    pts.forEach(function (t) {
+      var c = sv("circle", { cx: X(t.mae_pips), cy: Y(t.mfe_pips), r: 4.5, fill: t.result === "win" ? "var(--win)" : t.result === "loss" ? "var(--loss)" : "var(--muted)", opacity: 0.7 });
+      c.appendChild(sv("title", null, t.grp + ", " + when(t.posted_at) + ": " + t.outcome + ", against " + fmt(t.mae_pips) + ", in favour " + fmt(t.mfe_pips) + " pips"));
+      g.appendChild(c);
+    });
+    return g;
+  }
+  function kpis(m, extra) {
+    var items = [
+      ["Closed positions", String(m.closed)],
+      ["Win rate", pct(m.wins, m.closed)],
+      ["Net result", signed(m.totalR, 1) + "R", cls(m.totalR)],
+      ["Avg per position", m.avgR == null ? "–" : signed(m.avgR, 2) + "R", cls(m.avgR)],
+      ["Profit factor", pfText(m.pf)],
+      ["Max drawdown", m.closed ? (m.maxDD > 0.05 ? "−" + fmt(m.maxDD, 1) : "0.0") + "R" : "–"]
+    ].concat(extra || []);
+    return el("dl", { cls: "kpis" }, items.map(function (k) { return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[2] || "", text: k[1] })]); }));
+  }
+  function table(head, rows, opts) {
+    opts = opts || {};
+    var num = opts.num || [];
+    var thead = el("thead", null, [el("tr", null, head.map(function (h, i) {
+      var key = opts.keys && opts.keys[i];
+      var th = el("th", { cls: (num.indexOf(i) >= 0 ? "num " : "") + (key ? "sortable" : ""), text: h, scope: "col" });
+      if (key) {
+        if (state.s === key) th.setAttribute("aria-sort", state.d ? "descending" : "ascending");
+        th.tabIndex = 0;
+        var act = function () { go({ s: key, d: state.s === key ? !state.d : true }, true); };
+        th.addEventListener("click", act); th.addEventListener("keydown", function (e) { if (e.key === "Enter") act(); });
+        th.textContent = h + (state.s === key ? (state.d ? " ↓" : " ↑") : "");
+      }
+      return th;
+    }))]);
+    var tb = el("tbody", null, rows.map(function (r, ri) {
+      var tr = el("tr", { cls: opts.onRow ? "click" : "" }, r.map(function (c, i) {
+        var td = el("td", { cls: (num.indexOf(i) >= 0 ? "num " : "") + ((opts.wrap || []).indexOf(i) >= 0 ? "wrap " : "") + ((opts.flag || []).indexOf(i) >= 0 ? "flag" : "") });
+        if (c instanceof Node) td.appendChild(c); else td.textContent = c == null ? "" : String(c);
+        return td;
+      }));
+      if (opts.onRow) { tr.tabIndex = 0; tr.addEventListener("click", function () { opts.onRow(ri); }); tr.addEventListener("keydown", function (e) { if (e.key === "Enter") opts.onRow(ri); }); }
+      return tr;
+    }));
+    return el("div", { cls: "scroll" }, [el("table", null, [thead, tb])]);
   }
 
-  function renderHistory() {
+  // ---------- copies: channels posting identical signals ----------
+  function copies() {
+    var sig = sigPool().filter(function (t) { return t.status !== "incomplete" && t.status !== "superseded"; });
+    var key = function (t) { return [t.side, t.entry_lo, t.entry_hi, t.sl_initial, JSON.stringify(t.tps)].join("|"); };
+    var pairs = {};
+    sig.forEach(function (a, i) {
+      sig.slice(i + 1).forEach(function (b) {
+        if (a.grp === b.grp || key(a) !== key(b)) return;
+        var lag = (new Date(b.posted_at) - new Date(a.posted_at)) / 60000;
+        if (Math.abs(lag) > 60) return;
+        var first = lag >= 0 ? a.grp : b.grp, second = lag >= 0 ? b.grp : a.grp;
+        var k = [a.grp, b.grp].sort().join("\u0000");
+        var p = pairs[k] || (pairs[k] = { a: [a.grp, b.grp].sort()[0], b: [a.grp, b.grp].sort()[1], n: 0, lags: [], firsts: {} });
+        p.n++; p.lags.push(Math.abs(lag)); p.firsts[first] = (p.firsts[first] || 0) + 1;
+      });
+    });
+    var counts = {};
+    sig.forEach(function (t) { counts[t.grp] = (counts[t.grp] || 0) + 1; });
+    return Object.keys(pairs).map(function (k) {
+      var p = pairs[k], leader = Object.keys(p.firsts).sort(function (x, y) { return p.firsts[y] - p.firsts[x]; })[0];
+      return { a: p.a, b: p.b, n: p.n, share: p.n / Math.min(counts[p.a] || 1, counts[p.b] || 1), lag: median(p.lags), leader: leader };
+    }).filter(function (p) { return p.n >= 2; }).sort(function (x, y) { return y.n - x.n; });
+  }
+
+  // ---------- views ----------
+  function scopeLine(extra) {
+    return el("div", { cls: "scope" }, [
+      el("span", { cls: "chip", text: state.bf ? "Live + backfill (rough preview)" : "Live-logged signals only" }),
+      el("span", { cls: "chip", text: "Each TP counts as its own position" }),
+      el("span", { cls: "chip", text: "After costs" }), extra || null]);
+  }
+
+  function boardRows(rows) {
+    var list = channels().map(function (g) { return { g: g, m: metrics(rows.filter(function (t) { return t.grp === g; })) }; })
+      .sort(function (a, b) { return b.m.totalR - a.m.totalR || b.m.closed - a.m.closed; });
+    var max = Math.max(0.5, Math.max.apply(null, list.map(function (x) { return Math.abs(x.m.totalR); })));
+    return el("ol", { cls: "board" }, list.map(function (x, i) {
+      var m = x.m;
+      var facts = m.closed
+        ? plural(m.signals, "signal") + " (" + plural(m.positions, "position") + "), " + pct(m.wins, m.closed) + " wins" +
+          (m.avgR != null ? ", avg " + signed(m.avgR, 2) + "R" : "") + (m.pf != null ? ", profit factor " + pfText(m.pf) : "") + "." +
+          (m.closed < 30 ? " Too early to judge." : "")
+        : (m.signals ? plural(m.signals, "signal") + ", none closed yet." : "No scored signals yet.");
+      var btn = el("button", { "aria-label": x.g + ": " + signed(m.totalR, 1) + "R. Open channel details",
+        on: { click: function () { go({ v: "channels", c: x.g }); } } }, [
+        el("span", { cls: "rank", text: String(i + 1) }),
+        el("div", null, [el("span", { cls: "name", text: x.g }),
+          m.flags ? el("span", { cls: "badge", title: "Signals the channel deleted or edited", text: m.flags + " flagged" }) : null,
+          m.incomplete ? el("span", { cls: "badge", title: "Calls missing an SL or TP with no follow-up within the time limit", text: m.incomplete + " incomplete" }) : null,
+          el("div", { cls: "facts", text: facts })]),
+        el("div", { cls: "dbar", "aria-hidden": "true" }, [m.totalR ? el("span", { cls: m.totalR > 0 ? "pos" : "neg", style: "width:" + (Math.abs(m.totalR) / max * 50) + "%" }) : null]),
+        el("div", { cls: "big " + cls(m.totalR) }, [m.closed ? signed(m.totalR, 1) + "R" : "–", el("small", { text: m.closed ? signed(m.pips, 0) + " pips" : "" })])]);
+      return el("li", null, [btn]);
+    }));
+  }
+
+  function viewOverview(v) {
+    var rows = pool(), m = metrics(rows);
+    v.appendChild(scopeLine());
+    v.appendChild(kpis(m, [["Open now", String(m.open)], ["Waiting to fill", String(m.pending)]]));
+    v.appendChild(block("Channel leaderboard", "Ranked by net result in R. Select a channel for its full report.", boardRows(rows)));
+    var sc = rows.filter(isScored).filter(function (t) { return t.status === "closed"; });
+    var series = channels().map(function (g) { return { name: g, pts: cumulative(sc.filter(function (t) { return t.grp === g; })) }; });
+    series.push({ name: "All channels", pts: cumulative(sc), strong: true, color: "var(--gold)" });
+    var curve = el("div", { cls: "panel" }, [chart(function (w) { return lineChart(series, { unit: "R", label: "Cumulative result in R, all channels and each channel" }, w); })]);
+    var recent = sc.slice().sort(byExit).reverse().slice(0, 8);
+    var grid = el("div", { cls: "grid2" }, [
+      block("Cumulative result", "All channels in gold; each channel in grey.", curve),
+      block("Latest closed positions", null, recent.length ? table(["Channel", "Side", "Outcome", "R", "Closed"],
+        recent.map(function (t) { return [t.grp, sideCell(t), t.outcome, rCell(t.r_multiple), when(t.exit_at)]; }), { num: [3] }) : empty("No closed positions yet."))]);
+    v.appendChild(grid);
+  }
+
+  var CH_COLS = [["Channel", "grp"], ["Signals", "signals"], ["Positions", "positions"], ["Closed", "closed"], ["Win rate", "winRate"],
+    ["Net R", "totalR"], ["Avg R", "avgR"], ["Profit factor", "pf"], ["Max drawdown", "maxDD"], ["Worst losing run", "streak"],
+    ["TP1 hit", "tp1"], ["Avg time in trade", "avgMin"], ["Not filled", "nf"], ["Incomplete", "incomplete"], ["Flagged", "flags"], ["Net pips", "pips"]];
+
+  function viewChannels(v) {
+    if (state.c) return viewChannel(v, state.c);
+    var rows = pool();
+    v.appendChild(scopeLine());
+    var list = channels().map(function (g) {
+      var m = metrics(rows.filter(function (t) { return t.grp === g; }));
+      m.grp = g; m.winRate = m.closed ? m.wins / m.closed : null; m.tp1 = m.tp[0] ? m.tp[0].hit / m.tp[0].of : null;
+      m.nf = m.waited ? m.notFilled / m.waited : null;
+      return m;
+    });
+    var k = state.s;
+    if (!CH_COLS.some(function (c) { return c[1] === k; })) k = "totalR";
+    list.sort(function (a, b) {
+      var x = a[k], y = b[k], r;
+      if (typeof x === "string" || typeof y === "string") r = String(x).localeCompare(String(y));
+      else {
+        x = x == null || isNaN(x) ? -Infinity : x; y = y == null || isNaN(y) ? -Infinity : y;
+        r = x < y ? -1 : x > y ? 1 : 0;
+      }
+      return state.d ? -r : r;
+    });
+    v.appendChild(block("Compare channels", "Select a column to sort, or a channel for its full report.",
+      table(CH_COLS.map(function (c) { return c[0]; }), list.map(function (m) {
+        return [m.grp, m.signals, m.positions, m.closed, m.winRate == null ? "–" : Math.round(m.winRate * 100) + "%",
+          el("span", { cls: m.totalR > 0 ? "win" : m.totalR < 0 ? "loss" : "", text: signed(m.totalR, 1) }),
+          m.avgR == null ? "–" : signed(m.avgR, 2), pfText(m.pf), m.closed ? (m.maxDD > 0.05 ? "−" + fmt(m.maxDD, 1) : "0.0") + "R" : "–", m.streak,
+          m.tp1 == null ? "–" : Math.round(m.tp1 * 100) + "%", m.avgMin == null ? "–" : dur(m.avgMin),
+          m.nf == null ? "–" : Math.round(m.nf * 100) + "%", m.incomplete, m.flags, signed(m.pips, 0)];
+      }), { num: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], keys: CH_COLS.map(function (c) { return c[1]; }),
+            onRow: function (i) { go({ c: list[i].grp }); } })));
+    var cp = copies();
+    if (cp.length) v.appendChild(block("Channels posting the same signals", "Identical entry, SL and TPs within an hour. Count them as one source.",
+      table(["Channel", "Copies", "Identical signals", "Share", "Usually first", "Typical gap"], cp.map(function (p) {
+        return [p.a, p.b, p.n, Math.round(p.share * 100) + "%", p.leader, p.lag == null ? "" : dur(p.lag)];
+      }), { num: [2, 3, 5] })));
+  }
+
+  function viewChannel(v, g) {
+    var rows = pool().filter(function (t) { return t.grp === g; }), m = metrics(rows);
+    v.appendChild(el("button", { cls: "link back", text: "← All channels", on: { click: function () { go({ c: "" }); } } }));
+    v.appendChild(el("h2", { text: g, style: "font-size:22px;margin-bottom:10px" }));
+    v.appendChild(scopeLine());
+    v.appendChild(kpis(m, [["Signals", String(m.signals)], ["Avg time in trade", m.avgMin == null ? "–" : dur(m.avgMin)]]));
+    var closed = rows.filter(isScored).filter(function (t) { return t.status === "closed"; });
+    var outcomes = ["TP hit", "Stop loss", "Breakeven stop", "Closed by channel", "Timed out"].map(function (o) {
+      return { label: o, value: closed.filter(function (t) { return outcomeGroup(t) === o; }).length, bad: o === "Stop loss" };
+    }).filter(function (x) { return x.value; });
+    var bins = [[-Infinity, -1.25, "≤−1.25"], [-1.25, -0.75, "−1"], [-0.75, -0.25, "−0.5"], [-0.25, 0.25, "0"], [0.25, 0.75, "+0.5"],
+      [0.75, 1.25, "+1"], [1.25, 1.75, "+1.5"], [1.75, 2.5, "+2"], [2.5, Infinity, "≥+2.5"]].map(function (b) {
+      var n = closed.filter(function (t) { return t.r_multiple != null && t.r_multiple >= b[0] && t.r_multiple < b[1]; }).length;
+      return { label: b[2], value: n, n: n, color: b[1] <= 0 ? "var(--loss)" : b[0] >= 0.25 ? "var(--gold)" : "var(--muted)" };
+    });
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("Cumulative result", "Net R after each closed position.", el("div", { cls: "panel" }, [chart(function (w) { return lineChart([{ name: g, pts: cumulative(closed), strong: true, color: "var(--gold)" }], { unit: "R", label: "Cumulative result in R for " + g }, w); })])),
+      block("How far its TPs get", "Share of positions that reached each TP.", el("div", { cls: "panel" }, [bars(m.tp.map(function (t) {
+        return { label: "TP" + t.n, sub: plural(t.of, "position"), value: Math.round(t.hit / t.of * 100) }; }), { max: 100, fmt: function (x) { return x + "%"; } })])),
+      block("How positions end", null, el("div", { cls: "panel" }, [bars(outcomes, { fmt: function (x) { return x + " (" + pct(x, closed.length) + ")"; } })])),
+      block("Result per position", "Number of positions by R.", el("div", { cls: "panel" }, [chart(function (w) { return columns(bins, { showValues: true, label: "Distribution of R per position" }, w); })]))
+    ]));
+    var bySession = ["Asia", "London", "London + New York", "New York"].map(function (s) {
+      var r = closed.filter(function (t) { return t.session === s; }), rs = r.map(function (t) { return t.r_multiple || 0; });
+      return { label: s, sub: plural(r.length, "position"), value: r.length ? sum(rs) / r.length : 0, n: r.length };
+    }).filter(function (x) { return x.n; });
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("Against and in favour", "Each dot is a closed position: green won, red lost. Losers bunched just past the stop suggest stops are tight; winners far up suggest room for further TPs.", el("div", { cls: "panel" }, [chart(function (w) { return scatter(closed, w); })])),
+      block("By session", "Average R per position, London time.", el("div", { cls: "panel" }, [bars(bySession, { diverging: true, fmt: function (x) { return signed(x, 2) + "R"; } })]))
+    ]));
+    var sigs = sigPool().filter(function (s) { return s.grp === g; }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; }).slice(0, 12);
+    v.appendChild(block("Latest signals", null, sigs.length ? table(["Posted", "Side", "Entry", "SL", "TPs", "Result"], sigs.map(function (s) {
+      var ls = LEGS.filter(function (l) { return l.trade_id === s.id; });
+      var res = ls.map(function (l) { return l.status === "closed" ? (l.exit_reason === "tp" ? "TP" + l.leg + " ✓" : outcomeGroup(l)) : outcomeGroup(l); });
+      return [when(s.posted_at), sideCell(s), s.entry, s.sl_initial == null ? "none" : s.sl_initial, s.tp_text || "none",
+        Array.from(new Set(res)).join(", ")];
+    }), { wrap: [5] }) : empty("No signals yet.")));
+  }
+
+  function viewLive(v) {
+    var set = DATA.settings || {}, ph = set.pending_expiry_hours || 4, fm = set.followup_minutes || 5;
+    var rows = pool(), now = Date.now();
+    var open = rows.filter(function (t) { return t.status === "open"; }).sort(function (a, b) { return a.fill_at < b.fill_at ? 1 : -1; });
+    var waiting = rows.filter(function (t) { return t.status === "pending"; }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
+    var inc = SIGS.filter(function (t) { return t.status === "incomplete"; });
+    v.appendChild(el("dl", { cls: "kpis" }, [["Open positions", open.length], ["Waiting to fill", waiting.length], ["Awaiting SL or TP", inc.length]].map(function (k) {
+      return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })));
+    v.appendChild(block("Open positions", null, open.length ? table(["Channel", "Position", "Side", "Entry", "Filled at", "SL", "TP", "Status", "In trade for"],
+      open.map(function (t) { return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.entry, t.fill_price, t.sl_initial, t.tp == null ? "none" : t.tp, t.outcome, dur((now - new Date(t.fill_at)) / 60000)]; }),
+      { num: [4, 8] }) : empty("Nothing open right now. New positions appear here as soon as a channel’s signal fills.")));
+    v.appendChild(block("Waiting to fill", "Cancelled as not filled if price doesn’t reach the entry within " + ph + " hours.", waiting.length ? table(["Channel", "Position", "Side", "Order type", "Entry", "SL", "TP", "Posted", "Expires in"],
+      waiting.map(function (t) {
+        var start = new Date(t.complete_at || t.posted_at).getTime(), left = (start + ph * 3600000 - now) / 60000;
+        return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.order_type, t.entry, t.sl_initial, t.tp == null ? "none" : t.tp, when(t.posted_at), left > 0 ? dur(left) : "due"];
+      }), { num: [8] }) : empty("No orders waiting.")));
+    if (inc.length) v.appendChild(block("Awaiting SL or TP", "Invalid unless the channel completes them within " + fm + " minutes.", table(["Channel", "Side", "Entry", "Posted", "Time left"],
+      inc.map(function (t) { var left = (new Date(t.posted_at).getTime() + fm * 60000 - now) / 60000; return [t.grp, sideCell(t), t.entry, when(t.posted_at), left > 0 ? dur(left) : "due"]; }), { num: [4] })));
+  }
+
+  function group(rows, keyFn, order) {
+    var out = {};
+    rows.forEach(function (t) { var k = keyFn(t); (out[k] = out[k] || []).push(t); });
+    return (order || Object.keys(out)).filter(function (k) { return out[k]; }).map(function (k) {
+      var r = out[k], rs = r.map(function (t) { return t.r_multiple || 0; });
+      return { label: k, rows: r, n: r.length, avg: sum(rs) / r.length, total: sum(rs), wins: r.filter(function (t) { return t.result === "win"; }).length };
+    });
+  }
+  function viewAnalytics(v) {
+    var rows = pool(), closed = rows.filter(isScored).filter(function (t) { return t.status === "closed"; });
+    v.appendChild(scopeLine());
+    if (!closed.length) { v.appendChild(empty("Analytics appear once positions close. Tick Include backfill to explore the last two weeks.")); return; }
+    var sess = group(closed, function (t) { return t.session || "Unknown"; }, ["Asia", "London", "London + New York", "New York"]);
+    var hours = []; for (var h = 0; h < 24; h++) hours.push(h);
+    var byHour = hours.map(function (hh) {
+      var r = closed.filter(function (t) { return new Date(t.fill_at || t.posted_at).getHours() === hh; });
+      return { label: String(hh).padStart(2, "0"), value: r.length ? sum(r.map(function (t) { return t.r_multiple || 0; })) / r.length : 0, n: r.length };
+    });
+    var dn = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    var byDay = group(closed, function (t) { return dn[(new Date(t.fill_at || t.posted_at).getDay() + 6) % 7]; }, dn);
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("By session", "Average R per position, London time.", el("div", { cls: "panel" }, [bars(sess.map(function (s) {
+        return { label: s.label, sub: plural(s.n, "position") + ", " + pct(s.wins, s.n) + " wins", value: s.avg }; }), { diverging: true, fmt: function (x) { return signed(x, 2) + "R"; } })])),
+      block("By weekday", "Average R per position.", el("div", { cls: "panel" }, [bars(byDay.map(function (s) {
+        return { label: s.label, sub: plural(s.n, "position"), value: s.avg }; }), { diverging: true, fmt: function (x) { return signed(x, 2) + "R"; } })]))
+    ]));
+    v.appendChild(block("By hour of entry", "Average R per position by the hour it filled, in your time zone. Faded columns have fewer than 5 positions.",
+      el("div", { cls: "panel" }, [chart(function (w) { return columns(byHour, { labelEvery: w < 560 ? 3 : 2, minN: 5, fmt: function (x) { return signed(x, 2) + "R"; }, label: "Average R by hour of entry" }, w); })])));
+    var side = group(closed, function (t) { return t.side === "buy" ? "Buy" : "Sell"; }, ["Buy", "Sell"]);
+    var type = group(closed, function (t) { var o = t.order_type || "market"; return o.charAt(0).toUpperCase() + o.slice(1); }, ["Market", "Zone", "Limit", "Stop"]);
+    var tpn = group(closed.filter(function (t) { return t.tp != null; }), function (t) { return "TP" + t.leg; }, ["TP1", "TP2", "TP3", "TP4", "TP5", "TP6"]);
+    var segTable = function (gs) {
+      return table(["", "Positions", "Win rate", "Avg R", "Net R"], gs.map(function (s) {
+        return [s.label, s.n, pct(s.wins, s.n), signed(s.avg, 2), el("span", { cls: s.total > 0 ? "win" : s.total < 0 ? "loss" : "", text: signed(s.total, 1) })]; }), { num: [1, 2, 3, 4] });
+    };
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("Buy or sell", null, segTable(side)),
+      block("Entry type", "Zones and limits wait for price; market entries fill at once.", segTable(type)),
+      block("Which TP pays", "Every channel’s TP1 positions together, then TP2, and so on.", segTable(tpn)),
+      block("What costs take", null, (function () {
+        var m = metrics(rows);
+        return el("div", { cls: "panel" }, [el("dl", { cls: "kpis", style: "border:0" }, [
+          ["Before costs", signed(m.gross, 1) + "R"], ["After costs", signed(m.totalR, 1) + "R"], ["Cost per position", fmt(m.closed ? m.costPips / m.closed : null, 1) + " pips"]
+        ].map(function (k) { return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: k[1] })]); })),
+        el("p", { cls: "note", text: "Spread, commission and slippage from the tracker’s settings, applied to every position." })]);
+      })())
+    ]));
+    var outs = group(closed, outcomeGroup, ["TP hit", "Stop loss", "Breakeven stop", "Closed by channel", "Timed out"]);
+    v.appendChild(block("How positions end", "All channels.", el("div", { cls: "panel" }, [bars(outs.map(function (o) {
+      return { label: o.label, value: o.n, sub: "avg " + signed(o.avg, 2) + "R", bad: o.label === "Stop loss" }; }), { fmt: function (x) { return x + " (" + pct(x, closed.length) + ")"; } })])));
+  }
+
+  function filteredHistory() {
     var q = state.q.toLowerCase();
-    var rows = pool().filter(function (t) {
-      return (!state.g || t.grp === state.g) &&
-        (!q || [t.grp, t.outcome, t.entry, t.tp, t.tp_text, t.raw, (t.flags || []).join(" ")].join(" ").toLowerCase().indexOf(q) >= 0);
+    return pool().filter(function (t) {
+      return (!state.hc || t.grp === state.hc) && (!state.hs || t.side === state.hs) && (!state.ho || outcomeGroup(t) === state.ho || (state.ho === "Invalid" && isIncomplete(t))) &&
+        (!q || [t.grp, t.outcome, t.entry, t.tp, t.raw, t.red_flags].join(" ").toLowerCase().indexOf(q) >= 0);
     }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : (a.leg || 0) - (b.leg || 0); });
-    var shown = rows.slice(0, 300);
-    var box = document.getElementById("hist");
-    box.textContent = "";
-    if (!shown.length) { box.appendChild(el("p", { cls: "empty", text: q ? "No trades match \"" + state.q + "\". Clear the search to see all trades." : "No trades yet." })); }
-    else box.appendChild(table(["Position", "Posted", "Channel", "Side", "Order type", "Entry", "SL", "TP", "Filled at", "Fill time",
-      "Outcome", "Exit price", "Exit time", "Time in trade", "Pips", "Cost (pips)", "R", "Max against", "Max in favour",
-      "Session", "Source", "Red flags"],
-      shown.map(function (t) {
-        var pc = t.pnl_pips == null ? "" : el("span", { cls: t.pnl_pips > 0 ? "win" : t.pnl_pips < 0 ? "loss" : "", text: signed(t.pnl_pips, 1) });
-        return [posOf(t), when(t.posted_at), t.grp, sideCell(t), t.order_type, t.entry, t.sl_initial == null ? "none" : t.sl_initial,
-                tpOf(t), t.fill_price, when(t.fill_at), t.outcome, t.exit_price, when(t.exit_at), t.time_in_trade || "", pc,
-                t.cost_pips == null ? "" : fmt(t.cost_pips, 1), t.r_multiple == null ? "" : fmt(t.r_multiple, 2),
-                t.mae_pips == null ? "" : fmt(t.mae_pips, 1), t.mfe_pips == null ? "" : fmt(t.mfe_pips, 1),
-                t.session || "", t.source === "backfill" ? "Backfill" : "Live", t.red_flags || (t.flags || []).join("; ")];
-      }), [8, 11, 14, 15, 16, 17, 18]));
-    var hidden = trades.length - pool().length;
-    document.getElementById("hist-note").textContent =
-      (rows.length > 300 ? "Showing the latest 300 of " + rows.length + " positions. " : "") +
-      (hidden ? hidden + " backfilled positions are hidden; tick Include backfill to see them. " : "") +
-      "Each TP is its own position. The full logs are trades.csv (one line per signal) and positions.csv (one line per TP) in the tracker's export folder.";
+  }
+  var HCOLS = ["Position", "Posted", "Channel", "Side", "Order type", "Entry", "SL", "TP", "Filled at", "Fill time", "Outcome", "Exit price",
+    "Exit time", "Time in trade", "Pips", "Cost (pips)", "R", "Max against", "Max in favour", "Session", "Source", "Red flags"];
+  function hRow(t, plain) {
+    return [t.leg ? t.leg + " of " + t.legs : "", when(t.posted_at), t.grp, plain ? t.side : sideCell(t), t.order_type, t.entry,
+      t.sl_initial == null ? "none" : t.sl_initial, t.tp == null ? "none" : t.tp, t.fill_price, when(t.fill_at), t.outcome, t.exit_price,
+      when(t.exit_at), t.time_in_trade || "", plain ? t.pnl_pips : (t.pnl_pips == null ? "" : el("span", { cls: t.pnl_pips > 0 ? "win" : t.pnl_pips < 0 ? "loss" : "", text: signed(t.pnl_pips, 1) })),
+      t.cost_pips, plain ? t.r_multiple : rCell(t.r_multiple), t.mae_pips, t.mfe_pips, t.session || "", t.source === "backfill" ? "Backfill" : "Live", t.red_flags || ""];
+  }
+  function viewHistory(v) {
+    var sel = function (label, key, opts) {
+      var s = el("select", { "aria-label": label, on: { change: function (e) { var c = {}; c[key] = e.target.value; go(c); } } },
+        [el("option", { value: "", text: label })].concat(opts.map(function (o) { return el("option", { value: o[0], text: o[1] }); })));
+      s.value = state[key];
+      return s;
+    };
+    var q = el("input", { type: "search", id: "q", placeholder: "Search entry, TP, message…", "aria-label": "Search positions", value: state.q });
+    q.addEventListener("input", function () { state.q = q.value; save(); drawTable(); });
+    var dl = el("button", { cls: "action", text: "Download CSV", on: { click: function () {
+      var rows = [HCOLS].concat(filteredHistory().map(function (t) { return hRow(t, true); }));
+      var csv = rows.map(function (r) { return r.map(function (c) { c = c == null ? "" : String(c); return /[",\n]/.test(c) ? "\"" + c.replace(/"/g, "\"\"") + "\"" : c; }).join(","); }).join("\r\n");
+      var a = el("a", { href: URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })), download: "positions.csv" });
+      document.body.appendChild(a); a.click(); a.remove();
+    } } });
+    v.appendChild(el("div", { cls: "filters" }, [
+      sel("All channels", "hc", channels().map(function (c) { return [c, c]; })),
+      sel("All outcomes", "ho", OUTCOMES.map(function (o) { return [o, o]; })),
+      sel("Buy and sell", "hs", [["buy", "Buy"], ["sell", "Sell"]]), q, dl]));
+    var holder = el("div"), note = el("p", { cls: "note", style: "margin-top:10px" });
+    v.appendChild(holder); v.appendChild(note);
+    function drawTable() {
+      var rows = filteredHistory(), shown = rows.slice(0, 400);
+      holder.textContent = "";
+      holder.appendChild(shown.length ? table(HCOLS, shown.map(function (t) { return hRow(t, false); }), { num: [8, 11, 14, 15, 16, 17, 18], flag: [21], wrap: [21] })
+        : empty(state.q ? "No positions match “" + state.q + "”. Clear the search to see all." : "No positions match these filters."));
+      var hidden = LEGS.length - pool().length;
+      note.textContent = (rows.length > 400 ? "Showing the latest 400 of " + rows.length + " positions. " : rows.length + " positions. ") +
+        (hidden ? hidden + " backfilled positions are hidden; tick Include backfill to see them." : "");
+    }
+    drawTable();
   }
 
-  function renderAll() { renderHeader(); renderStandings(); renderLive(); renderCurve(); renderHistory(); }
+  // ---------- frame ----------
+  function renderHeader() {
+    var c = DATA.costs_usd_per_oz || {};
+    document.getElementById("asof").textContent = "Data as of " + (DATA.generated_at ? when(DATA.generated_at) : "unknown") +
+      ". Results are after costs ($" + fmt(c.spread, 2) + " spread, $" + fmt(c.slippage, 2) + " slippage per oz). " + NOTE;
+    document.getElementById("bf").checked = state.bf;
+    var live = pool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
+    var nav = document.getElementById("nav");
+    nav.textContent = "";
+    VIEWS.forEach(function (x) {
+      var b = el("button", { "aria-current": state.v === x[0] ? "page" : null, on: { click: function () { go({ v: x[0], c: x[0] === "channels" ? state.c : "" }); } } },
+        [x[1], x[0] === "live" && live ? el("span", { cls: "count", text: String(live) }) : null]);
+      nav.appendChild(b);
+    });
+  }
+  function render() {
+    renderHeader();
+    var v = document.getElementById("view");
+    v.textContent = "";
+    POST = [];
+    ({ overview: viewOverview, channels: viewChannels, live: viewLive, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
+    POST.forEach(function (f) { f(); });
+  }
+  var lastW = window.innerWidth, resizeT = null;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(function () { if (Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; render(); } }, 250);
+  });
+  document.getElementById("bf").addEventListener("change", function (e) { go({ bf: e.target.checked }); });
+  window.addEventListener("hashchange", function () { state = readState(); render(); });
 
-  document.getElementById("bf").addEventListener("change", function (e) { state.bf = e.target.checked; writeState(state); renderAll(); });
-  document.getElementById("clear").addEventListener("click", function () { state.g = ""; writeState(state); renderAll(); });
-  var qBox = document.getElementById("q");
-  qBox.value = state.q;
-  qBox.addEventListener("input", function () { state.q = qBox.value; writeState(state); renderHistory(); });
-  window.GST = { start: function (d, note) { DATA = d; trades = d.legs || d.trades || []; NOTE = note || ""; renderAll(); } };
+  window.GST = { start: function (d, note) {
+    DATA = d || {}; SIGS = DATA.trades || []; LEGS = DATA.legs || SIGS; NOTE = note || ""; render();
+  } };
 })();
 </script>
 <script>
@@ -421,7 +809,7 @@ body.locked main > :not(#unlock) { display: none; }
   }
   form.addEventListener("submit", function (e) { e.preventDefault(); err.textContent = "Opening…"; open(pw.value, true); });
   lockBtn.addEventListener("click", function () { store(null); password = null; cache = {}; lastStamp = null; pw.value = ""; locked(""); });
-  setInterval(function () { if (password && document.activeElement !== document.getElementById("q")) open(password, false); }, EVERY_MIN * 60000);
+  setInterval(function () { var a = document.activeElement; if (password && (!a || !/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))) open(password, false); }, EVERY_MIN * 60000);
 
   if (!window.crypto || !crypto.subtle || !window.DecompressionStream) {
     locked("This browser is too old to open the dashboard. Use a recent Chrome, Edge, Safari or Firefox.");
