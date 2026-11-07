@@ -43,7 +43,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--gold); font:
 .standings { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
 .standings li { border-bottom: 1px solid var(--rule); }
 .standings button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; gap: 4px 20px; padding: 12px 8px;
-  grid-template-columns: minmax(180px, 1.1fr) minmax(160px, 1.6fr) 96px; align-items: center; }
+  grid-template-columns: minmax(240px, 2fr) minmax(140px, 1.2fr) 96px; align-items: center; }
 .standings button:hover { background: var(--surface); }
 .standings li.on button { background: var(--gold-soft); }
 .name { font-weight: 600; overflow-wrap: anywhere; }
@@ -66,6 +66,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--gold); font:
 .scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+#hist td:last-child { white-space: normal; min-width: 240px; color: var(--loss); font-size: 13px; }
 th { color: var(--muted); font-weight: 600; font-size: 13px; }
 td.num, th.num { text-align: right; }
 tr:last-child td { border-bottom: 0; }
@@ -185,18 +186,26 @@ body.locked main > :not(#unlock) { display: none; }
 
   function pool() { return trades.filter(function (t) { return state.bf || t.source !== "backfill"; }); }
 
+  function distinct(rows) { return new Set(rows.map(function (t) { return t.trade_id || t.id; })).size; }
   function stats(rows) {
     var scored = rows.filter(function (t) { return !NOT_SCORED[t.status]; });
     var closed = scored.filter(function (t) { return t.status === "closed"; });
     var rs = closed.map(function (t) { return t.r_multiple; }).filter(function (r) { return r != null; });
+    var tpRates = [];
+    for (var i = 1; i <= 4; i++) {
+      var at = closed.filter(function (t) { return t.leg === i && t.tp != null; });
+      if (at.length) tpRates.push("TP" + i + " " + Math.round(at.filter(function (t) { return t.exit_reason === "tp"; }).length / at.length * 100) + "%");
+    }
     return {
-      signals: scored.length,
+      signals: distinct(scored),
+      positions: scored.length,
+      tpRates: tpRates,
       closed: closed.length,
       wins: closed.filter(function (t) { return t.result === "win"; }).length,
       net: closed.reduce(function (a, t) { return a + (t.pnl_pips || 0); }, 0),
       avgR: rs.length ? rs.reduce(function (a, b) { return a + b; }, 0) / rs.length : null,
       flags: scored.filter(function (t) { return t.flag_count > 0; }).length,
-      noSl: rows.filter(function (t) { return t.status === "incomplete"; }).length
+      noSl: distinct(rows.filter(function (t) { return t.status === "incomplete"; }))
     };
   }
 
@@ -220,8 +229,10 @@ body.locked main > :not(#unlock) { display: none; }
     list.forEach(function (x) {
       var s = x.s, pct = Math.abs(s.net) / max * 50;
       var facts = s.closed
-        ? s.closed + " closed, " + Math.round(s.wins / s.closed * 100) + "% wins" + (s.avgR != null ? ", avg " + fmt(s.avgR, 2) + "R" : "") +
-          (s.closed < 30 ? ". Too early to judge." : "")
+        ? s.signals + " signals (" + s.positions + " positions), " + s.closed + " closed, " + Math.round(s.wins / s.closed * 100) + "% wins" +
+          (s.avgR != null ? ", avg " + fmt(s.avgR, 2) + "R" : "") + ". " +
+          (s.tpRates.length ? "Hit rate: " + s.tpRates.join(", ") + ". " : "") +
+          (s.closed < 30 ? "Too early to judge." : "")
         : (s.signals ? s.signals + " signals, none closed yet" : "No scored signals yet");
       var name = el("div", null, [el("span", { cls: "name", text: x.g }),
         s.flags ? el("span", { cls: "badge", title: "Signals the channel deleted or edited", text: s.flags + " red flag" + (s.flags > 1 ? "s" : "") }) : null,
@@ -237,7 +248,7 @@ body.locked main > :not(#unlock) { display: none; }
     });
     document.getElementById("standings-note").textContent = state.bf
       ? "Includes backfilled signals: a rough preview only, since channels may have deleted old losing calls."
-      : "Live-logged signals only. Judge a channel after at least 30 closed trades.";
+      : "Live-logged signals only. Each TP counts as its own position. Judge a channel after at least 30 closed positions.";
     document.getElementById("clear").hidden = !state.g;
   }
 
@@ -252,6 +263,8 @@ body.locked main > :not(#unlock) { display: none; }
     return t;
   }
   function sideCell(t) { return el("span", { cls: t.side, text: t.side === "buy" ? "Buy" : "Sell" }); }
+  function tpOf(t) { return t.leg ? (t.tp == null ? "none" : t.tp) : (t.tp_text || "none"); }
+  function posOf(t) { return t.leg ? t.leg + " of " + t.legs : ""; }
 
   function renderLive() {
     var rows = pool().filter(function (t) { return (t.status === "open" || t.status === "pending") && (!state.g || t.grp === state.g); })
@@ -259,9 +272,9 @@ body.locked main > :not(#unlock) { display: none; }
     var box = document.getElementById("live");
     box.textContent = "";
     if (!rows.length) { box.appendChild(el("p", { cls: "empty", text: "Nothing open right now. New signals appear here as soon as a channel posts one." })); return; }
-    box.appendChild(table(["Channel", "Side", "Entry", "SL", "TPs", "Status", "Filled at", "For"],
-      rows.map(function (t) { return [t.grp, sideCell(t), t.entry, t.sl_initial == null ? "none" : t.sl_initial, t.tp_text || "none", t.outcome,
-        t.fill_price, ago(t.fill_at || t.complete_at || t.posted_at)]; }), [6, 7]));
+    box.appendChild(table(["Channel", "Side", "Entry", "SL", "TP", "Position", "Status", "Filled at", "For"],
+      rows.map(function (t) { return [t.grp, sideCell(t), t.entry, t.sl_initial == null ? "none" : t.sl_initial, tpOf(t), posOf(t), t.outcome,
+        t.fill_price, ago(t.fill_at || t.posted_at)]; }), [7, 8]));
   }
 
   function renderCurve() {
@@ -320,23 +333,28 @@ body.locked main > :not(#unlock) { display: none; }
     var q = state.q.toLowerCase();
     var rows = pool().filter(function (t) {
       return (!state.g || t.grp === state.g) &&
-        (!q || [t.grp, t.outcome, t.entry, t.tp_text, t.raw, (t.flags || []).join(" ")].join(" ").toLowerCase().indexOf(q) >= 0);
-    }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
-    var shown = rows.slice(0, 200);
+        (!q || [t.grp, t.outcome, t.entry, t.tp, t.tp_text, t.raw, (t.flags || []).join(" ")].join(" ").toLowerCase().indexOf(q) >= 0);
+    }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : (a.leg || 0) - (b.leg || 0); });
+    var shown = rows.slice(0, 300);
     var box = document.getElementById("hist");
     box.textContent = "";
     if (!shown.length) { box.appendChild(el("p", { cls: "empty", text: q ? "No trades match \"" + state.q + "\". Clear the search to see all trades." : "No trades yet." })); }
-    else box.appendChild(table(["Posted", "Channel", "Side", "Entry", "SL", "TPs", "Outcome", "Pips", "R"],
+    else box.appendChild(table(["Position", "Posted", "Channel", "Side", "Order type", "Entry", "SL", "TP", "Filled at", "Fill time",
+      "Outcome", "Exit price", "Exit time", "Time in trade", "Pips", "Cost (pips)", "R", "Max against", "Max in favour",
+      "Session", "Source", "Red flags"],
       shown.map(function (t) {
         var pc = t.pnl_pips == null ? "" : el("span", { cls: t.pnl_pips > 0 ? "win" : t.pnl_pips < 0 ? "loss" : "", text: signed(t.pnl_pips, 1) });
-        var row = [when(t.posted_at), t.grp, sideCell(t), t.entry, t.sl_initial == null ? "none" : t.sl_initial, t.tp_text || "none", t.outcome, pc, t.r_multiple == null ? "" : fmt(t.r_multiple, 2)];
-        return row;
-      }), [7, 8]));
+        return [posOf(t), when(t.posted_at), t.grp, sideCell(t), t.order_type, t.entry, t.sl_initial == null ? "none" : t.sl_initial,
+                tpOf(t), t.fill_price, when(t.fill_at), t.outcome, t.exit_price, when(t.exit_at), t.time_in_trade || "", pc,
+                t.cost_pips == null ? "" : fmt(t.cost_pips, 1), t.r_multiple == null ? "" : fmt(t.r_multiple, 2),
+                t.mae_pips == null ? "" : fmt(t.mae_pips, 1), t.mfe_pips == null ? "" : fmt(t.mfe_pips, 1),
+                t.session || "", t.source === "backfill" ? "Backfill" : "Live", t.red_flags || (t.flags || []).join("; ")];
+      }), [8, 11, 14, 15, 16, 17, 18]));
     var hidden = trades.length - pool().length;
     document.getElementById("hist-note").textContent =
-      (rows.length > 200 ? "Showing the latest 200 of " + rows.length + " trades. " : "") +
-      (hidden ? hidden + " backfilled signals are hidden; tick Include backfill to see them. " : "") +
-      "The full log is in trades.csv in this folder.";
+      (rows.length > 300 ? "Showing the latest 300 of " + rows.length + " positions. " : "") +
+      (hidden ? hidden + " backfilled positions are hidden; tick Include backfill to see them. " : "") +
+      "Each TP is its own position. The full logs are trades.csv (one line per signal) and positions.csv (one line per TP) in the tracker's export folder.";
   }
 
   function renderAll() { renderHeader(); renderStandings(); renderLive(); renderCurve(); renderHistory(); }
@@ -346,7 +364,7 @@ body.locked main > :not(#unlock) { display: none; }
   var qBox = document.getElementById("q");
   qBox.value = state.q;
   qBox.addEventListener("input", function () { state.q = qBox.value; writeState(state); renderHistory(); });
-  window.GST = { start: function (d, note) { DATA = d; trades = d.trades || []; NOTE = note || ""; renderAll(); } };
+  window.GST = { start: function (d, note) { DATA = d; trades = d.legs || d.trades || []; NOTE = note || ""; renderAll(); } };
 })();
 </script>
 <script>
