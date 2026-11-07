@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gold signal tracker</title>
+<style>
+:root {
+  --bg: #FAFBFC; --surface: #FFFFFF; --ink: #1B2430; --muted: #5B6675; --rule: #DDE2E8;
+  --gold: #9A6F06; --gold-soft: #F3E7C6; --win: #2E7D4F; --loss: #B3412F; --loss-soft: #F5DED9;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10151C; --surface: #161E28; --ink: #E8ECF1; --muted: #9AA6B4; --rule: #2A3542;
+    --gold: #E0B44C; --gold-soft: #3A3120; --win: #5BBF86; --loss: #E07A66; --loss-soft: #3B2421;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 15px; line-height: 1.5; font-variant-numeric: tabular-nums;
+}
+main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
+h1 { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; font-weight: 650;
+     font-size: 30px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 18px; font-weight: 650; margin: 0 0 4px; }
+.lede, .note { color: var(--muted); margin: 0; }
+.note { font-size: 13px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: flex-end; justify-content: space-between;
+         padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
+label.toggle { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; color: var(--muted); }
+input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--gold); }
+section { margin-top: 36px; }
+.section-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+button.link { background: none; border: 0; padding: 0; color: var(--gold); font: inherit; cursor: pointer; text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+
+/* Standings: the one bold element. A diverging bar per channel, centred on zero pips. */
+.standings { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.standings li { border-bottom: 1px solid var(--rule); }
+.standings button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; gap: 4px 20px; padding: 12px 8px;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(160px, 1.6fr) 96px; align-items: center; }
+.standings button:hover { background: var(--surface); }
+.standings li.on button { background: var(--gold-soft); }
+.name { font-weight: 600; overflow-wrap: anywhere; }
+.facts { color: var(--muted); font-size: 13px; }
+.badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 12px; font-weight: 600;
+         background: var(--loss-soft); color: var(--loss); }
+.bar { position: relative; height: 14px; }
+.bar::before { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 1px solid var(--muted); opacity: .5; }
+.bar span { position: absolute; top: 0; height: 100%; border-radius: 2px; }
+.bar .pos { left: 50%; background: var(--gold); }
+.bar .neg { right: 50%; background: var(--loss); }
+.pips { text-align: right; font-weight: 650; font-size: 16px; }
+.pips.pos { color: var(--gold); } .pips.neg { color: var(--loss); }
+.early { color: var(--muted); font-weight: 400; font-size: 12px; display: block; }
+@media (max-width: 640px) {
+  .standings button { grid-template-columns: 1fr 88px; }
+  .standings .bar { grid-column: 1 / -1; grid-row: 2; }
+}
+
+.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; }
+td.num, th.num { text-align: right; }
+tr:last-child td { border-bottom: 0; }
+.buy { color: var(--win); font-weight: 600; } .sell { color: var(--loss); font-weight: 600; }
+.win { color: var(--win); } .loss { color: var(--loss); }
+.empty { padding: 20px; color: var(--muted); }
+svg text { fill: var(--muted); font-size: 12px; }
+input[type=search] { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 6px 10px; min-width: 220px; }
+@media (prefers-reduced-motion: no-preference) { .standings li { transition: background .15s; } }
+body.locked main > :not(#unlock) { display: none; }
+#unlock { max-width: 420px; margin: 12vh auto 0; }
+#unlock p { color: var(--muted); }
+#unlock input[type=password] { display: block; width: 100%; font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; margin: 16px 0 12px; }
+#unlock button[type=submit] { font: inherit; font-weight: 600; color: #fff; background: var(--gold); border: 0;
+  border-radius: 6px; padding: 10px 18px; margin-top: 16px; cursor: pointer; }
+#unlock button[type=submit] { color: var(--surface); }
+#unlock .error { color: var(--loss); min-height: 1.5em; }
+</style>
+</head>
+<body class="locked">
+<main>
+  <form id="unlock" hidden>
+    <h1>Gold signal tracker</h1>
+    <p>Enter your password to open the dashboard.</p>
+    <label for="pw" class="note">Password</label>
+    <input type="password" id="pw" autocomplete="current-password" required>
+    <label class="toggle"><input type="checkbox" id="remember"> Remember on this device</label>
+    <br><button type="submit" id="open">Open dashboard</button>
+    <p class="error" id="unlock-error" role="alert"></p>
+  </form>
+  <header>
+    <div>
+      <h1>Gold signal tracker</h1>
+      <p class="lede" id="asof"></p>
+    </div>
+    <div>
+      <label class="toggle"><input type="checkbox" id="bf"> Include backfill (rough preview)</label>
+      <button class="link" id="lock" hidden>Lock</button>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-standings">
+    <div class="section-head">
+      <div>
+        <h2 id="h-standings">Channel standings</h2>
+        <p class="note" id="standings-note"></p>
+      </div>
+      <button class="link" id="clear" hidden>Show all channels</button>
+    </div>
+    <ul class="standings" id="standings"></ul>
+  </section>
+
+  <section aria-labelledby="h-live">
+    <div class="section-head"><h2 id="h-live">Live now</h2><p class="note">Open trades and signals waiting for their entry price.</p></div>
+    <div class="scroll" id="live"></div>
+  </section>
+
+  <section aria-labelledby="h-curve">
+    <div class="section-head"><h2 id="h-curve">Cumulative pips</h2><p class="note" id="curve-note"></p></div>
+    <div class="scroll" id="curve"></div>
+  </section>
+
+  <section aria-labelledby="h-hist">
+    <div class="section-head">
+      <h2 id="h-hist">Trade history</h2>
+      <input type="search" id="q" placeholder="Search outcome, entry, message…" aria-label="Search trades">
+    </div>
+    <div class="scroll" id="hist"></div>
+    <p class="note" id="hist-note"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var DATA = { trades: [] }, trades = [], NOTE = "";
+  var NOT_SCORED = { incomplete: 1, superseded: 1 };
+
+  // State lives in the address (#g=…&bf=1&q=…) so it survives the automatic reload.
+  function readState() {
+    var p = new URLSearchParams(location.hash.slice(1));
+    return { g: p.get("g") || "", bf: p.get("bf") === "1", q: p.get("q") || "" };
+  }
+  function writeState(s) {
+    var p = new URLSearchParams();
+    if (s.g) p.set("g", s.g);
+    if (s.bf) p.set("bf", "1");
+    if (s.q) p.set("q", s.q);
+    history.replaceState(null, "", "#" + p.toString());
+  }
+  var state = readState();
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "text") n.textContent = attrs[k];
+      else if (k === "cls") n.className = attrs[k];
+      else n.setAttribute(k, attrs[k]);
+    }
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function when(iso) {
+    if (!iso) return "";
+    return new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+  function ago(iso) {
+    var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (m < 60) return m + " min";
+    if (m < 48 * 60) return Math.round(m / 60) + " h";
+    return Math.round(m / 1440) + " days";
+  }
+  function fmt(x, d) { return x == null ? "" : Number(x).toFixed(d == null ? 1 : d); }
+  function signed(x, d) { return x == null ? "" : (x > 0 ? "+" : "") + fmt(x, d); }
+
+  function pool() { return trades.filter(function (t) { return state.bf || t.source !== "backfill"; }); }
+
+  function stats(rows) {
+    var scored = rows.filter(function (t) { return !NOT_SCORED[t.status]; });
+    var closed = scored.filter(function (t) { return t.status === "closed"; });
+    var rs = closed.map(function (t) { return t.r_multiple; }).filter(function (r) { return r != null; });
+    return {
+      signals: scored.length,
+      closed: closed.length,
+      wins: closed.filter(function (t) { return t.result === "win"; }).length,
+      net: closed.reduce(function (a, t) { return a + (t.pnl_pips || 0); }, 0),
+      avgR: rs.length ? rs.reduce(function (a, b) { return a + b; }, 0) / rs.length : null,
+      flags: scored.filter(function (t) { return t.flag_count > 0; }).length,
+      noSl: rows.filter(function (t) { return t.status === "incomplete"; }).length
+    };
+  }
+
+  function renderHeader() {
+    var asof = DATA.generated_at ? when(DATA.generated_at) : "unknown";
+    var c = DATA.costs_usd_per_oz || {};
+    document.getElementById("asof").textContent =
+      "Data as of " + asof + ". Results are after costs ($" + fmt(c.spread, 2) + " spread, $" + fmt(c.slippage, 2) +
+      " slippage per oz). " + NOTE;
+    document.getElementById("bf").checked = state.bf;
+  }
+
+  function renderStandings() {
+    var rows = pool();
+    var groups = Array.from(new Set(trades.map(function (t) { return t.grp; })));
+    var list = groups.map(function (g) { return { g: g, s: stats(rows.filter(function (t) { return t.grp === g; })) }; })
+      .sort(function (a, b) { return b.s.net - a.s.net || b.s.closed - a.s.closed; });
+    var max = Math.max(1, Math.max.apply(null, list.map(function (x) { return Math.abs(x.s.net); })));
+    var ul = document.getElementById("standings");
+    ul.textContent = "";
+    list.forEach(function (x) {
+      var s = x.s, pct = Math.abs(s.net) / max * 50;
+      var facts = s.closed
+        ? s.closed + " closed, " + Math.round(s.wins / s.closed * 100) + "% wins" + (s.avgR != null ? ", avg " + fmt(s.avgR, 2) + "R" : "") +
+          (s.closed < 30 ? ". Too early to judge." : "")
+        : (s.signals ? s.signals + " signals, none closed yet" : "No scored signals yet");
+      var name = el("div", null, [el("span", { cls: "name", text: x.g }),
+        s.flags ? el("span", { cls: "badge", title: "Signals the channel deleted or edited", text: s.flags + " red flag" + (s.flags > 1 ? "s" : "") }) : null,
+        s.noSl ? el("span", { cls: "badge", title: "Calls posted without a stop loss", text: s.noSl + " no SL" }) : null,
+        el("div", { cls: "facts", text: facts })]);
+      var bar = el("div", { cls: "bar", "aria-hidden": "true" }, [s.net ? el("span", { cls: s.net > 0 ? "pos" : "neg", style: "width:" + pct + "%" }) : null]);
+      var pips = el("div", { cls: "pips " + (s.net > 0 ? "pos" : s.net < 0 ? "neg" : "") }, [
+        s.closed ? signed(s.net, 0) : "–",
+        el("span", { cls: "early", text: s.closed ? "pips" : "" })]);
+      var btn = el("button", { "aria-pressed": String(state.g === x.g) }, [name, bar, pips]);
+      btn.addEventListener("click", function () { state.g = state.g === x.g ? "" : x.g; writeState(state); renderAll(); });
+      ul.appendChild(el("li", { cls: state.g === x.g ? "on" : "" }, [btn]));
+    });
+    document.getElementById("standings-note").textContent = state.bf
+      ? "Includes backfilled signals: a rough preview only, since channels may have deleted old losing calls."
+      : "Live-logged signals only. Judge a channel after at least 30 closed trades.";
+    document.getElementById("clear").hidden = !state.g;
+  }
+
+  function table(head, rows, numCols) {
+    var t = el("table", null, [el("thead", null, [el("tr", null, head.map(function (h, i) {
+      return el("th", { cls: numCols.indexOf(i) >= 0 ? "num" : "", text: h }); }))])]);
+    var tb = el("tbody");
+    rows.forEach(function (r) { tb.appendChild(el("tr", null, r.map(function (c, i) {
+      return c instanceof Node ? el("td", { cls: numCols.indexOf(i) >= 0 ? "num" : "" }, [c])
+                              : el("td", { cls: numCols.indexOf(i) >= 0 ? "num" : "", text: c == null ? "" : String(c) }); }))); });
+    t.appendChild(tb);
+    return t;
+  }
+  function sideCell(t) { return el("span", { cls: t.side, text: t.side === "buy" ? "Buy" : "Sell" }); }
+
+  function renderLive() {
+    var rows = pool().filter(function (t) { return (t.status === "open" || t.status === "pending") && (!state.g || t.grp === state.g); })
+      .sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
+    var box = document.getElementById("live");
+    box.textContent = "";
+    if (!rows.length) { box.appendChild(el("p", { cls: "empty", text: "Nothing open right now. New signals appear here as soon as a channel posts one." })); return; }
+    box.appendChild(table(["Channel", "Side", "Entry", "SL", "TPs", "Status", "Filled at", "For"],
+      rows.map(function (t) { return [t.grp, sideCell(t), t.entry, t.sl_initial == null ? "none" : t.sl_initial, t.tp_text || "none", t.outcome,
+        t.fill_price, ago(t.fill_at || t.complete_at || t.posted_at)]; }), [6, 7]));
+  }
+
+  function renderCurve() {
+    var rows = pool().filter(function (t) { return t.status === "closed" && t.exit_at; })
+      .sort(function (a, b) { return a.exit_at < b.exit_at ? -1 : 1; });
+    var box = document.getElementById("curve");
+    box.textContent = "";
+    document.getElementById("curve-note").textContent = state.g ? "Highlighting " + state.g + "." : "Select a channel in the standings to highlight it.";
+    if (!rows.length) { box.appendChild(el("p", { cls: "empty", text: "The curve starts once trades close." })); return; }
+    var t0 = new Date(rows[0].exit_at).getTime(), t1 = new Date(rows[rows.length - 1].exit_at).getTime() || t0 + 1;
+    var series = {}, lo = 0, hi = 0;
+    rows.forEach(function (t) {
+      var s = series[t.grp] || (series[t.grp] = { pts: [[t0, 0]], v: 0 });
+      s.v += t.pnl_pips || 0; s.pts.push([new Date(t.exit_at).getTime(), s.v]);
+      lo = Math.min(lo, s.v); hi = Math.max(hi, s.v);
+    });
+    var W = 1000, H = 260, L = 56, R = 16, T = 16, B = 28;
+    var x = function (ms) { return L + (W - L - R) * (ms - t0) / Math.max(1, t1 - t0); };
+    var y = function (v) { return T + (H - T - B) * (hi - v) / Math.max(1, hi - lo); };
+    var ns = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("width", "100%"); svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Cumulative pips after costs by channel over time");
+    svg.style.minWidth = "560px"; svg.style.display = "block";
+    function line(x1, y1, x2, y2, color, w, dash) {
+      var l = document.createElementNS(ns, "line");
+      [["x1", x1], ["y1", y1], ["x2", x2], ["y2", y2], ["stroke", color], ["stroke-width", w]].forEach(function (a) { l.setAttribute(a[0], a[1]); });
+      if (dash) l.setAttribute("stroke-dasharray", dash);
+      svg.appendChild(l);
+    }
+    function text(tx, ty, s, anchor) {
+      var t = document.createElementNS(ns, "text");
+      t.setAttribute("x", tx); t.setAttribute("y", ty); t.setAttribute("text-anchor", anchor || "end"); t.textContent = s;
+      svg.appendChild(t);
+    }
+    line(L, y(0), W - R, y(0), "var(--muted)", 1, "4 4");
+    text(L - 6, y(hi) + 4, signed(hi, 0)); text(L - 6, y(0) + 4, "0"); if (lo < 0) text(L - 6, y(lo) + 4, signed(lo, 0));
+    text(L, H - 8, when(rows[0].exit_at), "start"); text(W - R, H - 8, when(rows[rows.length - 1].exit_at), "end");
+    var names = Object.keys(series).sort(function (a) { return a === state.g ? 1 : -1; });
+    names.forEach(function (g) {
+      var p = document.createElementNS(ns, "polyline");
+      p.setAttribute("points", series[g].pts.map(function (q) { return x(q[0]).toFixed(1) + "," + y(q[1]).toFixed(1); }).join(" "));
+      p.setAttribute("fill", "none");
+      var on = !state.g || g === state.g;
+      p.setAttribute("stroke", g === state.g ? "var(--gold)" : "var(--muted)");
+      p.setAttribute("stroke-width", g === state.g ? 3 : 1.5);
+      p.setAttribute("opacity", on ? (g === state.g ? 1 : 0.55) : 0.2);
+      var title = document.createElementNS(ns, "title"); title.textContent = g + ": " + signed(series[g].v, 0) + " pips";
+      p.appendChild(title);
+      svg.appendChild(p);
+    });
+    box.appendChild(svg);
+  }
+
+  function renderHistory() {
+    var q = state.q.toLowerCase();
+    var rows = pool().filter(function (t) {
+      return (!state.g || t.grp === state.g) &&
+        (!q || [t.grp, t.outcome, t.entry, t.tp_text, t.raw, (t.flags || []).join(" ")].join(" ").toLowerCase().indexOf(q) >= 0);
+    }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
+    var shown = rows.slice(0, 200);
+    var box = document.getElementById("hist");
+    box.textContent = "";
+    if (!shown.length) { box.appendChild(el("p", { cls: "empty", text: q ? "No trades match \"" + state.q + "\". Clear the search to see all trades." : "No trades yet." })); }
+    else box.appendChild(table(["Posted", "Channel", "Side", "Entry", "SL", "TPs", "Outcome", "Pips", "R"],
+      shown.map(function (t) {
+        var pc = t.pnl_pips == null ? "" : el("span", { cls: t.pnl_pips > 0 ? "win" : t.pnl_pips < 0 ? "loss" : "", text: signed(t.pnl_pips, 1) });
+        var row = [when(t.posted_at), t.grp, sideCell(t), t.entry, t.sl_initial == null ? "none" : t.sl_initial, t.tp_text || "none", t.outcome, pc, t.r_multiple == null ? "" : fmt(t.r_multiple, 2)];
+        return row;
+      }), [7, 8]));
+    var hidden = trades.length - pool().length;
+    document.getElementById("hist-note").textContent =
+      (rows.length > 200 ? "Showing the latest 200 of " + rows.length + " trades. " : "") +
+      (hidden ? hidden + " backfilled signals are hidden; tick Include backfill to see them. " : "") +
+      "The full log is in trades.csv in this folder.";
+  }
+
+  function renderAll() { renderHeader(); renderStandings(); renderLive(); renderCurve(); renderHistory(); }
+
+  document.getElementById("bf").addEventListener("change", function (e) { state.bf = e.target.checked; writeState(state); renderAll(); });
+  document.getElementById("clear").addEventListener("click", function () { state.g = ""; writeState(state); renderAll(); });
+  var qBox = document.getElementById("q");
+  qBox.value = state.q;
+  qBox.addEventListener("input", function () { state.q = qBox.value; writeState(state); renderHistory(); });
+  window.GST = { start: function (d, note) { DATA = d; trades = d.trades || []; NOTE = note || ""; renderAll(); } };
+})();
+</script>
+<script>
+(function () {
+  "use strict";
+  var SRC = "https://raw.githubusercontent.com/MagotoA/XAUUSD-tracker/data/data.json", EVERY_MIN = 3, KEY = "gst-password";
+  var form = document.getElementById("unlock"), pw = document.getElementById("pw"),
+      remember = document.getElementById("remember"), err = document.getElementById("unlock-error"),
+      lockBtn = document.getElementById("lock");
+  var cache = {}, password = null, lastStamp = null;
+
+  function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+  function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function store(v) { try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch (e) {} }
+
+  async function key(pass, salt, iter) {
+    if (cache.pass === pass && cache.salt === salt) return cache.key;
+    var base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+    var k = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(salt), iterations: iter, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    cache = { pass: pass, salt: salt, key: k };
+    return k;
+  }
+  async function load(pass) {
+    var r = await fetch(SRC + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw { kind: "fetch", msg: "The data file couldn't be downloaded (HTTP " + r.status + "). The tracker may not have published yet." };
+    var blob = await r.json(), plain;
+    try {
+      plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(blob.iv) }, await key(pass, blob.salt, blob.iter), b64(blob.ct));
+    } catch (e) { throw { kind: "password", msg: "That password doesn't open this dashboard." }; }
+    var text = await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+    return JSON.parse(text);
+  }
+  function show(data) {
+    document.body.classList.remove("locked"); form.hidden = true; lockBtn.hidden = false;
+    if (data.generated_at === lastStamp) return;
+    lastStamp = data.generated_at;
+    GST.start(data, "This page checks for new data every " + EVERY_MIN + " minutes; updates can take about 5 minutes to appear.");
+  }
+  function locked(message) {
+    document.body.classList.add("locked"); form.hidden = false; lockBtn.hidden = true;
+    err.textContent = message || ""; pw.focus();
+  }
+  async function open(pass, fromForm) {
+    try {
+      var data = await load(pass);
+      password = pass;
+      if (fromForm) store(remember.checked ? pass : null);
+      show(data);
+    } catch (e) {
+      if (e && e.kind === "password") { store(null); locked(fromForm ? e.msg : ""); }
+      else locked((e && e.msg) || "Something went wrong opening the dashboard. Try again in a minute.");
+    }
+  }
+  form.addEventListener("submit", function (e) { e.preventDefault(); err.textContent = "Opening…"; open(pw.value, true); });
+  lockBtn.addEventListener("click", function () { store(null); password = null; cache = {}; lastStamp = null; pw.value = ""; locked(""); });
+  setInterval(function () { if (password && document.activeElement !== document.getElementById("q")) open(password, false); }, EVERY_MIN * 60000);
+
+  if (!window.crypto || !crypto.subtle || !window.DecompressionStream) {
+    locked("This browser is too old to open the dashboard. Use a recent Chrome, Edge, Safari or Firefox.");
+  } else if (stored()) { document.body.classList.add("locked"); open(stored(), false); }
+  else locked("");
+})();
+</script>
+</body>
+</html>
