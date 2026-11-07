@@ -616,16 +616,19 @@ body.locked main > :not(#unlock) { display: none; }
     var inc = SIGS.filter(function (t) { return t.status === "incomplete"; });
     v.appendChild(el("dl", { cls: "kpis" }, [["Open positions", open.length], ["Waiting to fill", waiting.length], ["Awaiting SL or TP", inc.length]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })));
-    v.appendChild(block("Open positions", null, open.length ? table(["Channel", "Position", "Side", "Entry", "Filled at", "SL", "TP", "Status", "In trade for"],
-      open.map(function (t) { return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.entry, t.fill_price, t.sl_initial, t.tp == null ? "none" : t.tp, t.outcome, dur((now - new Date(t.fill_at)) / 60000)]; }),
-      { num: [4, 8] }) : empty("Nothing open right now. New positions appear here as soon as a channel’s signal fills.")));
-    v.appendChild(block("Waiting to fill", "Cancelled as not filled if price doesn’t reach the entry within " + ph + " hours.", waiting.length ? table(["Channel", "Position", "Side", "Order type", "Entry", "SL", "TP", "Posted", "Expires in"],
+    var mh = set.max_trade_hours || 72;
+    v.appendChild(block("Open positions", "Closed at market if neither the TP nor the SL is hit within " + mh + " hours of market time.", open.length ? table(["Channel", "Position", "Side", "Entry", "Posted date", "Posted time", "Filled at", "Fill date", "Fill time", "SL", "TP", "Status", "In trade for"],
+      open.map(function (t) { return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.entry, dateOnly(t.posted_at), timeOnly(t.posted_at), t.fill_price,
+        dateOnly(t.fill_at), timeOnly(t.fill_at), t.sl_initial, t.tp == null ? "none" : t.tp, t.outcome, dur((now - new Date(t.fill_at)) / 60000)]; }),
+      { num: [6, 12] }) : empty("Nothing open right now. New positions appear here as soon as a channel’s signal fills.")));
+    v.appendChild(block("Waiting to fill", "Cancelled as not filled if price doesn’t reach the entry within " + ph + " hours.", waiting.length ? table(["Channel", "Position", "Side", "Order type", "Entry", "SL", "TP", "Posted date", "Posted time", "Expires in"],
       waiting.map(function (t) {
         var start = new Date(t.complete_at || t.posted_at).getTime(), left = (start + ph * 3600000 - now) / 60000;
-        return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.order_type, t.entry, t.sl_initial, t.tp == null ? "none" : t.tp, when(t.posted_at), left > 0 ? dur(left) : "due"];
-      }), { num: [8] }) : empty("No orders waiting.")));
-    if (inc.length) v.appendChild(block("Awaiting SL or TP", "Invalid unless the channel completes them within " + fm + " minutes.", table(["Channel", "Side", "Entry", "Posted", "Time left"],
-      inc.map(function (t) { var left = (new Date(t.posted_at).getTime() + fm * 60000 - now) / 60000; return [t.grp, sideCell(t), t.entry, when(t.posted_at), left > 0 ? dur(left) : "due"]; }), { num: [4] })));
+        return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.order_type, t.entry, t.sl_initial, t.tp == null ? "none" : t.tp,
+          dateOnly(t.posted_at), timeOnly(t.posted_at), left > 0 ? dur(left) : "due"];
+      }), { num: [9] }) : empty("No orders waiting.")));
+    if (inc.length) v.appendChild(block("Awaiting SL or TP", "Invalid unless the channel completes them within " + fm + " minutes.", table(["Channel", "Side", "Entry", "Posted date", "Posted time", "Time left"],
+      inc.map(function (t) { var left = (new Date(t.posted_at).getTime() + fm * 60000 - now) / 60000; return [t.grp, sideCell(t), t.entry, dateOnly(t.posted_at), timeOnly(t.posted_at), left > 0 ? dur(left) : "due"]; }), { num: [5] })));
   }
 
   function group(rows, keyFn, order) {
