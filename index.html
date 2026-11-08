@@ -688,6 +688,27 @@ body.locked main > :not(#unlock) { display: none; }
           : (function () { var left = (new Date(t.posted_at).getTime() + ph * 3600000 - now) / 60000; return left > 0 ? "expires in " + dur(left) : "due"; })();
         return [dateOnly(t.posted_at), timeOnly(t.posted_at), t.leg + " of " + t.legs, sideCell(t), t.entry, t.sl_initial, t.tp, t.outcome, t.fill_price, extra];
       }), { num: [8] }) : empty("No active consensus trade right now. One appears here as soon as two independent channels agree.")));
+    var at = (DATA.autotrades || []).slice().sort(function (a, b) { return (a.at || "") < (b.at || "") ? 1 : -1; });
+    if (at.length) {
+      var placed = at.filter(function (x) { return x.ticket; }), done = at.filter(function (x) { return x.profit != null && x.exit_time; });
+      var net = sum(done.map(function (x) { return x.profit; })), cur = (at[0] && at[0].currency) || "";
+      var wins = done.filter(function (x) { return x.profit > 0; }).length;
+      var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
+      v.appendChild(block("Your MT5 auto-trades", "Orders the tracker placed in MT5 for consensus signals, with the broker’s actual results.",
+        el("div", null, [
+          el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["Orders placed", placed.length], ["Closed", done.length], ["Win rate", pct(wins, done.length)],
+            ["Net profit", money(net)], ["Open or pending", at.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length],
+            ["Skipped", at.filter(function (x) { return x.status === "Skipped" || x.status === "Failed"; }).length]].map(function (k) {
+            return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "Net profit" ? cls(net) : "", text: String(k[1]) })]); })),
+          table(["Date", "Time", "Side", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP", "Fill price", "Fill time", "Exit price", "Exit time", "Note"],
+            at.map(function (x) {
+              return [dateOnly(x.at), timeOnly(x.at), x.side ? sideCell(x) : "", x.status || "",
+                x.profit == null ? "" : el("span", { cls: x.profit > 0 ? "win" : x.profit < 0 ? "loss" : "", text: money(x.profit) }),
+                x.kind || "", x.volume == null ? "" : x.volume, x.entry, x.sl, x.tp,
+                x.fill_price, x.fill_time ? when(x.fill_time) : "", x.exit_price, x.exit_time ? when(x.exit_time) : "", x.note || ""];
+            }), { num: [4, 6, 7, 8, 9, 10, 12], wrap: [14] })
+        ])));
+    }
     var all = metrics(pool());
     var best = channels().map(function (g) { var x = metrics(pool().filter(function (t) { return t.grp === g; })); x.g = g; return x; })
       .filter(function (x) { return x.closed >= 10 && x.avgR != null; }).sort(function (a, b) { return b.avgR - a.avgR; })[0];
@@ -708,6 +729,16 @@ body.locked main > :not(#unlock) { display: none; }
       var who = ((s.meta && s.meta.supporters) || []).map(function (x) { return x.grp; }).join(", ");
       return [dateOnly(s.posted_at), timeOnly(s.posted_at), sideCell(s), s.entry, s.sl_initial, s.tp_text || "", who, Array.from(new Set(res)).join(", ")];
     }), { wrap: [6, 7] }) : empty("No consensus signals yet" + (state.bf ? "." : ". Tick Include backfill to see consensus from the backfilled weeks."))));
+    var log = rows.slice().sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : (a.leg || 0) - (b.leg || 0); });
+    var dl = el("button", { cls: "action", text: "Download CSV", on: { click: function () {
+      var data = [HCOLS].concat(log.map(function (t) { return hRow(t, true); }));
+      var csv = data.map(function (r) { return r.map(function (c) { c = c == null ? "" : String(c); return /[",\n]/.test(c) ? "\"" + c.replace(/"/g, "\"\"") + "\"" : c; }).join(","); }).join("\r\n");
+      var a = el("a", { href: URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })), download: "consensus_positions.csv" });
+      document.body.appendChild(a); a.click(); a.remove();
+    } } });
+    v.appendChild(block("Consensus trade log", "Every consensus position as the tracker scored it, with the same columns as the History tab.",
+      log.length ? table(HCOLS, log.map(function (t) { return hRow(t, false); }), { num: [9, 13, 16, 17, 18, 19, 20], flag: [23], wrap: [23] })
+        : empty("No consensus positions yet."), dl));
   }
 
   function viewLive(v) {
