@@ -200,7 +200,7 @@ body.locked main > :not(#unlock) { display: none; }
 (function () {
   "use strict";
   var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], CLEGS = [], CSIGS = [], NOTE = "";
-  var VIEWS = [["overview", "Overview"], ["consensus", "Consensus"], ["channels", "Channels"], ["live", "Live"], ["analytics", "Analytics"], ["history", "History"]];
+  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["analytics", "Analytics"], ["history", "History"]];
   var OUTCOMES = ["TP hit", "Stop loss", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
   // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
