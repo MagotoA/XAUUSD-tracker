@@ -199,8 +199,8 @@ body.locked main > :not(#unlock) { display: none; }
 <script>
 (function () {
   "use strict";
-  var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], NOTE = "";
-  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["analytics", "Analytics"], ["history", "History"]];
+  var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], CLEGS = [], CSIGS = [], NOTE = "";
+  var VIEWS = [["overview", "Overview"], ["consensus", "Consensus"], ["channels", "Channels"], ["live", "Live"], ["analytics", "Analytics"], ["history", "History"]];
   var OUTCOMES = ["TP hit", "Stop loss", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
   // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
@@ -670,6 +670,46 @@ body.locked main > :not(#unlock) { display: none; }
     }), { wrap: [5] }) : empty("No signals yet.")));
   }
 
+  function cpool() { return CLEGS.filter(function (t) { return state.bf || t.source !== "backfill"; }); }
+  function viewConsensus(v) {
+    var rows = cpool(), m = metrics(rows), now = Date.now(), set = DATA.settings || {}, ph = set.pending_expiry_hours || 4;
+    var sigs = CSIGS.filter(function (t) { return state.bf || t.source !== "backfill"; }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
+    var rule = (CSIGS[0] && CSIGS[0].meta && CSIGS[0].meta.rule) || "2 or more independent channels call the same direction within 30 minutes, with entries within $3 of each other and no opposing call";
+    v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch" , text:
+      "A consensus signal forms when " + rule + ". Channels that copy each other count once. Its trade uses the median entry, stop and TPs of the agreeing signals and is scored from the moment the consensus formed. Follow it on a demo account until it has about 30 closed signals of its own." }));
+    v.appendChild(scopeLine());
+    v.appendChild(kpis(m, [["Signals", String(m.signals)], ["Open now", String(m.open)], ["Waiting to fill", String(m.pending)]]));
+    var live = rows.filter(function (t) { return t.status === "open" || t.status === "pending"; })
+      .sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : a.leg - b.leg; });
+    v.appendChild(block("Active consensus trades", "Open positions and entries still waiting for price.", live.length ? table(
+      ["Posted date", "Posted time", "Position", "Side", "Entry", "SL", "TP", "Status", "Filled at", "Expires / in trade"],
+      live.map(function (t) {
+        var extra = t.status === "open" ? dur((now - new Date(t.fill_at)) / 60000)
+          : (function () { var left = (new Date(t.posted_at).getTime() + ph * 3600000 - now) / 60000; return left > 0 ? "expires in " + dur(left) : "due"; })();
+        return [dateOnly(t.posted_at), timeOnly(t.posted_at), t.leg + " of " + t.legs, sideCell(t), t.entry, t.sl_initial, t.tp, t.outcome, t.fill_price, extra];
+      }), { num: [8] }) : empty("No active consensus trade right now. One appears here as soon as two independent channels agree.")));
+    var all = metrics(pool());
+    var best = channels().map(function (g) { var x = metrics(pool().filter(function (t) { return t.grp === g; })); x.g = g; return x; })
+      .filter(function (x) { return x.closed >= 10 && x.avgR != null; }).sort(function (a, b) { return b.avgR - a.avgR; })[0];
+    var cmp = [["Consensus", m], ["All channels together", all]];
+    if (best) cmp.push(["Best channel by avg R: " + best.g, best]);
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("How it compares", "Is agreement better than following channels on their own?", table(["", "Closed", "Win rate", "Avg R", "Profit factor", "Max drawdown"],
+        cmp.map(function (c) { var x = c[1]; return [c[0], x.closed, pct(x.wins, x.closed), x.avgR == null ? "–" : signed(x.avgR, 2), pfText(x.pf), x.closed ? (x.maxDD > 0.05 ? "−" + fmt(x.maxDD, 1) : "0.0") + "R" : "–"]; }),
+        { num: [1, 2, 3, 4, 5] })),
+      block("Cumulative result", null, el("div", { cls: "panel" }, [chart(function (w) {
+        var closed = rows.filter(function (t) { return t.status === "closed"; });
+        return lineChart([{ name: "Consensus", pts: cumulative(closed), strong: true, color: "var(--gold)" }], { unit: "R", label: "Cumulative result of consensus trades in R", emptyText: "The chart starts once consensus trades close." }, w);
+      })]))
+    ]));
+    v.appendChild(block("Consensus signals", null, sigs.length ? table(["Posted date", "Posted time", "Side", "Entry", "SL", "TPs", "Agreed by", "Result"], sigs.map(function (s) {
+      var ls = CLEGS.filter(function (l) { return l.trade_id === s.id; });
+      var res = ls.map(function (l) { return l.status === "closed" ? (l.exit_reason === "tp" ? "TP" + l.leg + " ✓" : outcomeGroup(l)) : outcomeGroup(l); });
+      var who = ((s.meta && s.meta.supporters) || []).map(function (x) { return x.grp; }).join(", ");
+      return [dateOnly(s.posted_at), timeOnly(s.posted_at), sideCell(s), s.entry, s.sl_initial, s.tp_text || "", who, Array.from(new Set(res)).join(", ")];
+    }), { wrap: [6, 7] }) : empty("No consensus signals yet" + (state.bf ? "." : ". Tick Include backfill to see consensus from the backfilled weeks."))));
+  }
+
   function viewLive(v) {
     var set = DATA.settings || {}, ph = set.pending_expiry_hours || 4, fm = set.followup_minutes || 5;
     var rows = pool(), now = Date.now();
@@ -819,11 +859,13 @@ body.locked main > :not(#unlock) { display: none; }
       ". Results are after costs ($" + fmt(c.spread, 2) + " spread, $" + fmt(c.slippage, 2) + " slippage per oz). " + NOTE;
     document.getElementById("bf").checked = state.bf;
     var live = pool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
+    var cLive = cpool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
     var nav = document.getElementById("nav");
     nav.textContent = "";
     VIEWS.forEach(function (x) {
       var b = el("button", { "aria-current": state.v === x[0] ? "page" : null, on: { click: function () { go({ v: x[0], c: x[0] === "channels" ? state.c : "" }); } } },
-        [x[1], x[0] === "live" && live ? el("span", { cls: "count", text: String(live) }) : null]);
+        [x[1], x[0] === "live" && live ? el("span", { cls: "count", text: String(live) }) : null,
+         x[0] === "consensus" && cLive ? el("span", { cls: "count", text: String(cLive) }) : null]);
       nav.appendChild(b);
     });
   }
@@ -832,7 +874,7 @@ body.locked main > :not(#unlock) { display: none; }
     var v = document.getElementById("view");
     v.textContent = "";
     POST = [];
-    ({ overview: viewOverview, channels: viewChannels, live: viewLive, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
+    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
     POST.forEach(function (f) { f(); });
   }
   var lastW = window.innerWidth, resizeT = null;
@@ -844,7 +886,11 @@ body.locked main > :not(#unlock) { display: none; }
   window.addEventListener("hashchange", function () { state = readState(); render(); });
 
   window.GST = { start: function (d, note) {
-    DATA = d || {}; SIGS = DATA.trades || []; LEGS = DATA.legs || SIGS; NOTE = note || ""; render();
+    DATA = d || {};
+    var sigs = DATA.trades || [], legs = DATA.legs || sigs;
+    SIGS = sigs.filter(function (t) { return !t.consensus; }); CSIGS = sigs.filter(function (t) { return t.consensus; });
+    LEGS = legs.filter(function (t) { return !t.consensus; }); CLEGS = legs.filter(function (t) { return t.consensus; });
+    NOTE = note || ""; render();
   } };
 })();
 </script>
