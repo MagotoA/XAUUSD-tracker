@@ -82,9 +82,22 @@ dd.pos { color: var(--win); } dd.neg { color: var(--loss); }
 
 /* Leaderboard: the signature element. Total R per channel, a bar either side of zero. */
 ol.board { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule-strong); counter-reset: rank; }
-ol.board li { border-bottom: 1px solid var(--rule); }
+ol.board > li { border-bottom: 1px solid var(--rule); }
 ol.board button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; gap: 4px 20px; padding: 13px 8px;
-  grid-template-columns: 28px minmax(220px, 2fr) minmax(140px, 1.3fr) 92px; align-items: center; }
+  grid-template-columns: 28px minmax(210px, 1.5fr) minmax(220px, 1.7fr) minmax(110px, 0.9fr) 92px; align-items: center; }
+ul.notes { margin: 0; padding-left: 16px; font-size: 13px; line-height: 1.45; }
+ul.notes li + li { margin-top: 3px; }
+ul.notes li::marker { color: var(--gold); }
+.board-head { display: grid; grid-template-columns: 28px minmax(210px, 1.5fr) minmax(220px, 1.7fr) minmax(110px, 0.9fr) 92px;
+  gap: 4px 20px; padding: 0 8px 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.board-head span:last-child { text-align: right; }
+ul.notes.wide { font-size: 14px; }
+@media (max-width: 900px) {
+  ol.board button { grid-template-columns: 28px 1fr 92px; }
+  ol.board .notes { grid-column: 2 / 4; grid-row: 2; }
+  ol.board .dbar { grid-column: 2 / 4; grid-row: 3; }
+  .board-head { display: none; }
+}
 ol.board button:hover { background: var(--surface); }
 ol.board button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 .rank { color: var(--muted); font-size: 13px; text-align: right; }
@@ -101,7 +114,8 @@ ol.board button:focus-visible { outline: 2px solid var(--gold); outline-offset: 
 .big.pos { color: var(--gold); } .big.neg { color: var(--loss); }
 @media (max-width: 640px) {
   ol.board button { grid-template-columns: 22px 1fr 78px; }
-  ol.board .dbar { grid-column: 2 / 4; grid-row: 2; }
+  ol.board .notes { grid-column: 2 / 4; grid-row: 2; }
+  ol.board .dbar { grid-column: 2 / 4; grid-row: 3; }
 }
 
 /* Bars (HTML) */
@@ -487,11 +501,56 @@ body.locked main > :not(#unlock) { display: none; }
       el("span", { cls: "chip", text: "After costs" }), extra || null]);
   }
 
+  // ---------- notes: plain-language observations from the numbers ----------
+  function insights(g, rows, m, cp) {
+    var out = [], pos = m.signals ? m.positions / m.signals : 0;
+    var closed = rows.filter(isScored).filter(function (t) { return t.status === "closed"; });
+    var wr = m.closed ? Math.round(m.wins / m.closed * 100) : 0;
+    if (!m.closed) return ["No closed positions yet."];
+    if (m.closed < 10) out.push("Only " + plural(m.closed, "closed position") + " so far: far too early to judge.");
+    cp.forEach(function (p) {
+      if (p.a !== g && p.b !== g) return;
+      var other = p.a === g ? p.b : p.a;
+      if (p.share >= 0.6) out.push(p.leader === g
+        ? "Copied by " + other + " (" + Math.round(p.share * 100) + "% identical signals). Count them as one source; this one posts first."
+        : "Copies " + other + ": " + Math.round(p.share * 100) + "% identical signals, usually " + dur(p.lag) + " later. Follow the original instead.");
+    });
+    if (m.closed >= 15) {
+      if (m.pf != null && m.pf < 1) out.push("Losing overall: wins don’t cover losses (profit factor " + pfText(m.pf) + ").");
+      else if (m.pf != null && m.pf < 1.2) out.push("Thin edge: wins " + wr + "% of the time, but gains barely cover losses (profit factor " + pfText(m.pf) + "). Costs could wipe it out.");
+      else if (m.pf >= 1.8) out.push("Strong edge so far: profit factor " + pfText(m.pf) + ", avg " + signed(m.avgR, 2) + "R per position.");
+    }
+    var corrected = distinct(rows.filter(function (t) { return /SL corrected/.test(t.red_flags || ""); }));
+    if (corrected >= 2) out.push(plural(corrected, "stop-loss typo") + " corrected. Double-check its stops before following.");
+    if (m.incomplete >= 3) out.push("Often posts calls without an SL or TP (" + m.incomplete + ").");
+    if (m.waited >= 10 && m.notFilled / m.waited >= 0.3) out.push(Math.round(m.notFilled / m.waited * 100) + "% of its entries never filled: zones are often missed.");
+    if (m.tp.length >= 3) {
+      var first = m.tp[0], last = m.tp[m.tp.length - 1];
+      if (first.of >= 5 && first.hit / first.of >= 0.6 && last.hit / last.of <= 0.35)
+        out.push("TP1 reached " + pct(first.hit, first.of) + " of the time, TP" + last.n + " only " + pct(last.hit, last.of) + ": the early targets do the work.");
+    }
+    if (pos >= 4) out.push("About " + Math.round(pos) + " TPs per signal, so its totals weigh more. Compare it by average R.");
+    if (m.streak >= 5) out.push("Had " + m.streak + " losing positions in a row.");
+    if (m.maxDD >= 8) out.push("Drawdown reached −" + fmt(m.maxDD, 1) + "R at its worst.");
+    var ss = group(closed, function (t) { return t.session || "Unknown"; }).filter(function (x) { return x.n >= 5; }).sort(function (a, b) { return b.avg - a.avg; });
+    if (ss.length >= 2 && ss[0].avg - ss[ss.length - 1].avg >= 0.3)
+      out.push("Best in " + ss[0].label + " (" + signed(ss[0].avg, 2) + "R), weakest in " + ss[ss.length - 1].label + " (" + signed(ss[ss.length - 1].avg, 2) + "R).");
+    var sd = group(closed, function (t) { return t.side; }).filter(function (x) { return x.n >= 5; });
+    if (sd.length === 2 && Math.abs(sd[0].avg - sd[1].avg) >= 0.3) {
+      var b = sd[0].label === "buy" ? sd[0] : sd[1], se = sd[0].label === "buy" ? sd[1] : sd[0];
+      out.push("Buys " + signed(b.avg, 2) + "R vs sells " + signed(se.avg, 2) + "R on average.");
+    }
+    if (!out.length) out.push("Nothing unusual: steady results (" + wr + "% wins, avg " + signed(m.avgR, 2) + "R).");
+    return out;
+  }
+
   function boardRows(rows) {
+    var cp = copies();
     var list = channels().map(function (g) { return { g: g, m: metrics(rows.filter(function (t) { return t.grp === g; })) }; })
       .sort(function (a, b) { return b.m.totalR - a.m.totalR || b.m.closed - a.m.closed; });
     var max = Math.max(0.5, Math.max.apply(null, list.map(function (x) { return Math.abs(x.m.totalR); })));
-    return el("ol", { cls: "board" }, list.map(function (x, i) {
+    var head = el("div", { cls: "board-head", "aria-hidden": "true" }, [el("span"), el("span", { text: "Channel" }), el("span", { text: "Notes" }), el("span"), el("span", { text: "Net result" })]);
+    var board = el("ol", { cls: "board" }, list.map(function (x, i) {
       var m = x.m;
       var facts = m.closed
         ? plural(m.signals, "signal") + " (" + plural(m.positions, "position") + "), " + pct(m.wins, m.closed) + " wins" +
@@ -505,10 +564,12 @@ body.locked main > :not(#unlock) { display: none; }
           m.flags ? el("span", { cls: "badge", title: "Signals the channel deleted or edited", text: m.flags + " flagged" }) : null,
           m.incomplete ? el("span", { cls: "badge", title: "Calls missing an SL or TP with no follow-up within the time limit", text: m.incomplete + " incomplete" }) : null,
           el("div", { cls: "facts", text: facts })]),
+        el("ul", { cls: "notes" }, insights(x.g, rows.filter(function (t) { return t.grp === x.g; }), m, cp).slice(0, 3).map(function (n) { return el("li", { text: n }); })),
         el("div", { cls: "dbar", "aria-hidden": "true" }, [m.totalR ? el("span", { cls: m.totalR > 0 ? "pos" : "neg", style: "width:" + (Math.abs(m.totalR) / max * 50) + "%" }) : null]),
         el("div", { cls: "big " + cls(m.totalR) }, [m.closed ? signed(m.totalR, 1) + "R" : "–", el("small", { text: m.closed ? signed(m.pips, 0) + " pips" : "" })])]);
       return el("li", null, [btn]);
     }));
+    return el("div", null, [head, board]);
   }
 
   function viewOverview(v) {
@@ -575,6 +636,7 @@ body.locked main > :not(#unlock) { display: none; }
     v.appendChild(el("h2", { text: g, style: "font-size:22px;margin-bottom:10px" }));
     v.appendChild(scopeLine());
     v.appendChild(kpis(m, [["Signals", String(m.signals)], ["Avg time in trade", m.avgMin == null ? "–" : dur(m.avgMin)]]));
+    v.appendChild(block("What stands out", null, el("ul", { cls: "notes wide" }, insights(g, rows, m, copies()).map(function (n) { return el("li", { text: n }); }))));
     var closed = rows.filter(isScored).filter(function (t) { return t.status === "closed"; });
     var outcomes = ["TP hit", "Stop loss", "Breakeven stop", "Closed by channel", "Timed out"].map(function (o) {
       return { label: o, value: closed.filter(function (t) { return outcomeGroup(t) === o; }).length, bad: o === "Stop loss" };
