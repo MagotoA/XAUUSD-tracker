@@ -710,12 +710,13 @@ body.locked main > :not(#unlock) { display: none; }
         ])));
     }
     var all = metrics(pool());
-    var best = channels().map(function (g) { var x = metrics(pool().filter(function (t) { return t.grp === g; })); x.g = g; return x; })
-      .filter(function (x) { return x.closed >= 10 && x.avgR != null; }).sort(function (a, b) { return b.avgR - a.avgR; })[0];
+    var qual = channels().map(function (g) { var x = metrics(pool().filter(function (t) { return t.grp === g; })); x.g = g; return x; })
+      .filter(function (x) { return x.closed >= 10 && x.avgR != null; }).sort(function (a, b) { return b.avgR - a.avgR; });
+    var best = qual[0];
     var cmp = [["Consensus", m], ["All channels together", all]];
-    if (best) cmp.push(["Best channel by avg R: " + best.g, best]);
+    if (best) cmp.push([(qual.length === 1 ? "Only channel with 10+ closed: " : "Best of " + qual.length + " channels with 10+ closed: ") + best.g, best]);
     v.appendChild(el("div", { cls: "grid2" }, [
-      block("How it compares", "Is agreement better than following channels on their own?", table(["", "Closed", "Win rate", "Avg R", "Profit factor", "Max drawdown"],
+      block("How it compares", "Is agreement better than following channels on their own? Channels need 10 closed positions to be compared.", table(["", "Closed", "Win rate", "Avg R", "Profit factor", "Max drawdown"],
         cmp.map(function (c) { var x = c[1]; return [c[0], x.closed, pct(x.wins, x.closed), x.avgR == null ? "–" : signed(x.avgR, 2), pfText(x.pf), x.closed ? (x.maxDD > 0.05 ? "−" + fmt(x.maxDD, 1) : "0.0") + "R" : "–"]; }),
         { num: [1, 2, 3, 4, 5] })),
       block("Cumulative result", null, el("div", { cls: "panel" }, [chart(function (w) {
