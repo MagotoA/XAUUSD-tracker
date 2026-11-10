@@ -189,6 +189,7 @@ body.locked main > :not(#unlock) { display: none; }
     </div>
     <div class="controls">
       <label class="toggle"><input type="checkbox" id="bf"> Include backfill</label>
+      <button class="link" id="older" hidden></button>
       <button class="link" id="lock" hidden>Lock</button>
     </div>
   </header>
@@ -208,7 +209,7 @@ body.locked main > :not(#unlock) { display: none; }
     var p = new URLSearchParams(location.hash.slice(1));
     return { v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
              s: p.get("s") || "totalR", d: p.get("d") !== "0", hc: p.get("hc") || "", ho: p.get("ho") || "", hs: p.get("hs") || "",
-             hf: p.get("hf") || "", ht: p.get("ht") || "", hb: p.get("hb") || "posted" };
+             hf: p.get("hf") || "", ht: p.get("ht") || "", hb: p.get("hb") || "posted", om: parseInt(p.get("om") || "0", 10) || 0 };
   }
   var state = readState();
   function save() {
@@ -221,6 +222,7 @@ body.locked main > :not(#unlock) { display: none; }
     if (!state.d) p.set("d", "0");
     ["hc", "ho", "hs", "hf", "ht"].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
     if (state.hb !== "posted") p.set("hb", state.hb);
+    if (state.om) p.set("om", String(state.om));
     history.replaceState(null, "", "#" + p.toString());
   }
   function go(changes, keepScroll) { Object.assign(state, changes); save(); render(); if (!keepScroll) window.scrollTo(0, 0); }
@@ -587,6 +589,28 @@ body.locked main > :not(#unlock) { display: none; }
       block("Latest closed positions", null, recent.length ? table(["Channel", "Side", "Outcome", "R", "Closed"],
         recent.map(function (t) { return [t.grp, sideCell(t), t.outcome, rCell(t.r_multiple), when(t.exit_at)]; }), { num: [3] }) : empty("No closed positions yet."))]);
     v.appendChild(grid);
+    var at = allTimeBlock();
+    if (at) v.appendChild(at);
+  }
+
+  // ---------- all-time totals (every signal since tracking began, also the months not loaded on the page) ----------
+  function allTimeBlock() {
+    var at = DATA.alltime, scope = state.bf ? "all" : "live";
+    if (!at) return null;
+    var list = Object.keys(at).map(function (g) { return { g: g, c: at[g].consensus ? 1 : 0, x: at[g][scope] }; })
+      .filter(function (r) { return r.x && r.x.signals; })
+      .sort(function (a, b) { return (b.c - a.c) || (b.x.total_r - a.x.total_r); });
+    if (!list.length) return null;
+    var first = list.map(function (r) { return r.x.first; }).filter(Boolean).sort()[0];
+    var note = "Every " + (state.bf ? "" : "live-logged ") + "signal" + (first ? " since " + dateOnly(first) : "") +
+      (DATA.window_days ? ", including the months older than the " + DATA.window_days + " days loaded on this page" : "") +
+      ". Each TP counts as its own position, after costs.";
+    return block("All time", note, table(["Channel", "Signals", "Closed positions", "Win rate", "Net R", "Avg R", "Net pips"],
+      list.map(function (r) {
+        var x = r.x;
+        return [r.g, x.signals, x.closed, pct(x.wins, x.closed), el("span", { cls: x.total_r > 0 ? "win" : x.total_r < 0 ? "loss" : "", text: x.closed ? signed(x.total_r, 1) : "–" }),
+                x.avg_r == null ? "–" : signed(x.avg_r, 2), x.closed ? signed(x.pips, 0) : "–"];
+      }), { num: [1, 2, 3, 4, 5, 6] }));
   }
 
   var CH_COLS = [["Channel", "grp"], ["Signals", "signals"], ["Positions", "positions"], ["Closed", "closed"], ["Win rate", "winRate"],
@@ -894,7 +918,8 @@ body.locked main > :not(#unlock) { display: none; }
   function renderHeader() {
     var c = DATA.costs_usd_per_oz || {};
     document.getElementById("asof").textContent = "Data as of " + (DATA.generated_at ? when(DATA.generated_at) : "unknown") +
-      ". Results are after costs ($" + fmt(c.spread, 2) + " spread, $" + fmt(c.slippage, 2) + " slippage per oz). " + NOTE;
+      ". Results are after costs ($" + fmt(c.spread, 2) + " spread, $" + fmt(c.slippage, 2) + " slippage per oz). " + windowNote() + NOTE;
+    olderButton();
     document.getElementById("bf").checked = state.bf;
     var live = pool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
     var cLive = cpool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
@@ -906,6 +931,69 @@ body.locked main > :not(#unlock) { display: none; }
          x[0] === "consensus" && cLive ? el("span", { cls: "count", text: String(cLive) }) : null]);
       nav.appendChild(b);
     });
+  }
+  // ---------- older months: the page holds the last window_days; older months load on request ----------
+  var SHARED = ["grp", "posted_at", "side", "order_type", "entry", "sl_initial", "fill_at", "fill_price", "source", "flag_count",
+                "flags", "raw", "completed_after_min", "consensus", "complete_at"];
+  var CACHE = {}, MERGED = {}, LOADING = null, FAILED = "", LOADER = null;
+  function expand(d) {   // the export leaves out empty fields and the fields a position shares with its signal
+    if (!d || d.format !== 2) return d;
+    var tk = d.trade_keys || [], lk = {}, by = {};
+    (d.leg_keys || []).forEach(function (k) { lk[k] = 1; });
+    (d.trades || []).forEach(function (t) { tk.forEach(function (k) { if (!(k in t)) t[k] = null; }); by[t.id] = t; });
+    (d.legs || []).forEach(function (l) {
+      var t = by[l.trade_id] || {};
+      SHARED.forEach(function (k) { if (!(k in l) && lk[k]) l[k] = k in t ? t[k] : null; });
+      Object.keys(lk).forEach(function (k) { if (!(k in l)) l[k] = null; });
+    });
+    d.format = 1;
+    return d;
+  }
+  function monthName(m) { var p = m.split("-"); return new Date(Date.UTC(+p[0], +p[1] - 1, 15)).toLocaleDateString([], { month: "short", year: "numeric" }); }
+  function months() { return (DATA.archive || []).map(function (a) { return a.month; }).sort().reverse(); }   // newest first
+  function nextMonth() { return months().filter(function (m) { return !MERGED[m]; })[0] || null; }
+  function merged() { return Object.keys(MERGED).length; }
+  function windowNote() {
+    if (!DATA.window_from) return "";
+    var older = merged() ? " plus " + merged() + " older month" + (merged() > 1 ? "s" : "") : "";
+    return "Showing signals from " + dateOnly(DATA.window_from) + " (last " + DATA.window_days + " days)" + older + ". ";
+  }
+  function olderButton() {
+    var b = document.getElementById("older"), m = nextMonth();
+    b.hidden = !m || !LOADER;
+    if (b.hidden) return;
+    b.disabled = !!LOADING;
+    b.textContent = LOADING ? "Loading " + monthName(LOADING) + "…" : FAILED ? "Couldn't load " + monthName(m) + ". Try again" : "Load older months (" + monthName(m) + ")";
+  }
+  function split() {
+    var sigs = DATA.trades || [], legs = DATA.legs || sigs;
+    SIGS = sigs.filter(function (t) { return !t.consensus; }); CSIGS = sigs.filter(function (t) { return t.consensus; });
+    LEGS = legs.filter(function (t) { return !t.consensus; }); CLEGS = legs.filter(function (t) { return t.consensus; });
+  }
+  function merge(m) {   // add an archive month; anything already on the page wins
+    var a = CACHE[m], ti = {}, li = {};
+    (DATA.trades || []).forEach(function (t) { ti[t.id] = 1; });
+    (DATA.legs || []).forEach(function (l) { li[l.id] = 1; });
+    a.trades.forEach(function (t) { if (!ti[t.id]) DATA.trades.push(t); });
+    a.legs.forEach(function (l) { if (!li[l.id]) DATA.legs.push(l); });
+    MERGED[m] = 1;
+  }
+  function fresh(m) {   // a cached month still matches what the tracker last exported
+    var a = CACHE[m], e = (DATA.archive || []).filter(function (x) { return x.month === m; })[0];
+    return a && e && a.trades.length === e.trades && a.legs.length === e.positions;
+  }
+  function loadMore() {   // load months until state.om of them are on the page
+    while (merged() < state.om) {
+      var m = nextMonth();
+      if (!m) { state.om = merged(); save(); break; }
+      if (fresh(m)) { merge(m); continue; }
+      if (!LOADER) break;
+      LOADING = m; FAILED = "";
+      LOADER(m);
+      olderButton();
+      return;
+    }
+    split(); render();
   }
   function render() {
     renderHeader();
@@ -921,15 +1009,32 @@ body.locked main > :not(#unlock) { display: none; }
     resizeT = setTimeout(function () { if (Math.abs(window.innerWidth - lastW) > 40) { lastW = window.innerWidth; render(); } }, 250);
   });
   document.getElementById("bf").addEventListener("change", function (e) { go({ bf: e.target.checked }); });
+  document.getElementById("older").addEventListener("click", function () {
+    if (LOADING || !nextMonth()) return;
+    state.om = merged() + 1; save(); loadMore();
+  });
   window.addEventListener("hashchange", function () { state = readState(); render(); });
 
-  window.GST = { start: function (d, note) {
-    DATA = d || {};
-    var sigs = DATA.trades || [], legs = DATA.legs || sigs;
-    SIGS = sigs.filter(function (t) { return !t.consensus; }); CSIGS = sigs.filter(function (t) { return t.consensus; });
-    LEGS = legs.filter(function (t) { return !t.consensus; }); CLEGS = legs.filter(function (t) { return t.consensus; });
-    NOTE = note || ""; render();
-  } };
+  window.GST = {
+    start: function (d, note) {
+      DATA = expand(d || {}); DATA.trades = DATA.trades || []; DATA.legs = DATA.legs || [];
+      MERGED = {}; LOADING = null; FAILED = "";
+      NOTE = note || ""; split(); render();
+      if (state.om) loadMore();
+    },
+    setLoader: function (f) { LOADER = f; olderButton(); },
+    addMonth: function (a) {   // called with one archive month (export/archive/<month>.js, or the website's copy)
+      if (!a || !a.month) return;
+      CACHE[a.month] = expand(a);
+      if (LOADING === a.month) LOADING = null;
+      if (!MERGED[a.month]) merge(a.month);
+      loadMore();
+    },
+    loadFailed: function (m, msg) {
+      if (LOADING === m) LOADING = null;
+      FAILED = msg || "failed"; state.om = merged(); save(); split(); render();
+    }
+  };
 })();
 </script>
 <script>
@@ -953,8 +1058,8 @@ body.locked main > :not(#unlock) { display: none; }
     cache = { pass: pass, salt: salt, key: k };
     return k;
   }
-  async function load(pass) {
-    var r = await fetch(SRC + "?t=" + Date.now(), { cache: "no-store" });
+  async function load(pass, src) {
+    var r = await fetch((src || SRC) + "?t=" + Date.now(), { cache: "no-store" });
     if (!r.ok) throw { kind: "fetch", msg: "The data file couldn't be downloaded (HTTP " + r.status + "). The tracker may not have published yet." };
     var blob = await r.json(), plain;
     try {
@@ -988,6 +1093,11 @@ body.locked main > :not(#unlock) { display: none; }
   lockBtn.addEventListener("click", function () { store(null); password = null; cache = {}; lastStamp = null; pw.value = ""; locked(""); });
   setInterval(function () { var a = document.activeElement; if (password && (!a || !/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))) open(password, false); }, EVERY_MIN * 60000);
 
+  GST.setLoader(function (m) {   // older months: archive/<month>.json next to data.json, encrypted the same way
+    load(password, SRC.replace(/data\.json$/, "archive/" + m + ".json"))
+      .then(function (a) { GST.addMonth(a); })
+      .catch(function (e) { GST.loadFailed(m, (e && e.msg) || "failed"); });
+  });
   if (!window.crypto || !crypto.subtle || !window.DecompressionStream) {
     locked("This browser is too old to open the dashboard. Use a recent Chrome, Edge, Safari or Firefox.");
   } else if (stored()) { document.body.classList.add("locked"); open(stored(), false); }
