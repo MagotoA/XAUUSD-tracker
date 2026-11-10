@@ -681,7 +681,7 @@ body.locked main > :not(#unlock) { display: none; }
       "A consensus signal forms when " + rule + ". Channels that copy each other count once. Its trade uses the median entry, stop and TPs of the agreeing signals and is scored from the moment the consensus formed. Follow it on a demo account until it has about 30 closed signals of its own." }));
     v.appendChild(scopeLine());
     v.appendChild(kpis(m, [["Signals", String(m.signals)], ["Open now", String(m.open)], ["Waiting to fill", String(m.pending)]]));
-    v.appendChild(el("p", { cls: "note", style: "margin:14px 0 6px;max-width:80ch", text: "Consensus ladder: a second order for each consensus at the best entry any agreeing channel posted (with that channel’s stop) and the furthest TP1 any of them posted. Until it fills it moves to any better entry a channel posts in the same direction; cancelled " + ph + "h after the last move." }));
+    v.appendChild(el("p", { cls: "note", style: "margin:14px 0 6px;max-width:80ch", text: "Consensus ladder: a second order for each consensus at the best entry any agreeing channel posted, with a $10 (100-pip) stop and the furthest TP1 any of them posted. Until it fills it moves to any better entry a channel posts in the same direction; cancelled " + ph + "h after the last move, or once price is $30 further away." }));
     v.appendChild(kpis(ml, [["Ladder orders", String(ml.signals)], ["Open now", String(ml.open)], ["Waiting to fill", String(ml.pending)]]));
     var live = both.filter(function (t) { return t.status === "open" || t.status === "pending"; })
       .sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : a.leg - b.leg; });
