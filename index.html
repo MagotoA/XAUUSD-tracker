@@ -207,7 +207,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
 (function () {
   "use strict";
   var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], CLEGS = [], CSIGS = [], NOTE = "";
-  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["analytics", "Analytics"], ["history", "History"]];
+  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["account", "Live account"], ["analytics", "Analytics"], ["history", "History"]];
   var OUTCOMES = ["TP hit", "Stop loss", "Trailing stop", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
   // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
@@ -800,6 +800,32 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : empty("No consensus positions yet."), dl));
   }
 
+  function viewAccount(v) {   // the live MT5 account (live_trader.py): its own orders and the broker's results
+    var lt = DATA.livetrades;
+    if (!lt) { v.appendChild(empty("The live trader isn’t running.")); return; }
+    var at = (lt.trades || []).slice().sort(function (a, b) { return (a.at || "") < (b.at || "") ? 1 : -1; }), cur = lt.currency || "";
+    var placed = at.filter(function (x) { return x.ticket; }), done = at.filter(function (x) { return x.profit != null && x.exit_time; });
+    var net = sum(done.map(function (x) { return x.profit; })), wins = done.filter(function (x) { return x.profit > 0; }).length;
+    var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
+    var openN = at.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length;
+    v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
+      "Your live account (" + (lt.server || "") + ", account " + (lt.account || "") + "). It copies the demo’s " + (lt.orders || []).join(" and ") +
+      " orders (never own signals) with its own size and limits: " + lt.lots_per_1000 + " lots per $1,000 of balance, at least " + lt.min_lots +
+      " (" + lt.lots_now + " lots now), at most " + lt.max_open + " open or pending, daily loss limit " + lt.day_limit + "%. Results are the broker’s, in " + cur +
+      "; open trades’ running profit shows in MT5. Last change " + when(lt.updated) + "." }));
+    v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["Balance", (lt.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur],
+      ["Orders placed", placed.length], ["Closed", done.length], ["Win rate", pct(wins, done.length)], ["Net profit", done.length ? money(net) : "–"],
+      ["Open or pending", openN], ["Not taken", at.filter(function (x) { return x.status === "Skipped" || x.status === "Failed"; }).length]].map(function (k) {
+      return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "Net profit" ? cls(net) : "", text: String(k[1]) })]); })));
+    v.appendChild(block("Live orders", "Newest first. “Not taken”: the demo placed it but the live account’s own limits skipped it (the note says why).", at.length ? table(
+      ["Date", "Time", "Side", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP", "Fill price", "Fill time", "Exit price", "Exit time", "Note"],
+      at.map(function (x) {
+        return [dateOnly(x.at), timeOnly(x.at), x.side ? sideCell(x) : "", x.status === "Skipped" ? "Not taken" : (x.status || ""),
+          x.profit == null ? "" : el("span", { cls: x.profit > 0 ? "win" : x.profit < 0 ? "loss" : "", text: money(x.profit) }),
+          x.kind || "", x.volume == null ? "" : x.volume, x.entry, x.sl, x.tp,
+          x.fill_price, x.fill_time ? when(x.fill_time) : "", x.exit_price, x.exit_time ? when(x.exit_time) : "", x.note || ""];
+      }), { num: [4, 6, 7, 8, 9, 10, 12], wrap: [14] }) : empty("No live orders yet. The next consensus or ladder order the demo places is copied here within seconds.")));
+  }
   function ownStatus(v) {   // own signals: 4-hour trend and the zones being watched
     var os = DATA.own_status;
     if (os) {
@@ -977,10 +1003,13 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var cLive = cpool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
     var nav = document.getElementById("nav");
     nav.textContent = "";
+    var lt = DATA.livetrades, lOpen = lt ? (lt.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length : 0;
     VIEWS.forEach(function (x) {
+      if (x[0] === "account" && !lt) return;   // only when the live trader runs
       var b = el("button", { "aria-current": state.v === x[0] ? "page" : null, on: { click: function () { go({ v: x[0], c: x[0] === "channels" ? state.c : "" }); } } },
         [x[1], x[0] === "live" && live ? el("span", { cls: "count", text: String(live) }) : null,
-         x[0] === "consensus" && cLive ? el("span", { cls: "count", text: String(cLive) }) : null]);
+         x[0] === "consensus" && cLive ? el("span", { cls: "count", text: String(cLive) }) : null,
+         x[0] === "account" && lOpen ? el("span", { cls: "count", text: String(lOpen) }) : null]);
       nav.appendChild(b);
     });
   }
@@ -1052,7 +1081,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var v = document.getElementById("view");
     v.textContent = "";
     POST = [];
-    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
+    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
     POST.forEach(function (f) { f(); });
   }
   var lastW = window.innerWidth, resizeT = null;
