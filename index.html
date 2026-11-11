@@ -800,14 +800,37 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : empty("No consensus positions yet."), dl));
   }
 
+  function ownStatus(v) {   // own signals: 4-hour trend and the zones being watched
+    var os = DATA.own_status;
+    if (os) {
+      var tw = os.trend === 1 ? "Up" : os.trend === -1 ? "Down" : "None";
+      var why = os.ema20 == null ? "not enough 4-hour candles yet."
+        : os.trend !== 0 ? "the 20 EMA (" + fmt(os.ema20, 2) + ") is " + (os.trend === 1 ? "above" : "below") + " the 50 EMA (" + fmt(os.ema50, 2) + ") and the last 4-hour close (" + fmt(os.close, 2) + ") is " + (os.trend === 1 ? "above" : "below") + " the 20 EMA."
+        : "the 20 EMA (" + fmt(os.ema20, 2) + ") is " + (os.ema20 > os.ema50 ? "above" : "below") + " the 50 EMA (" + fmt(os.ema50, 2) + ") but the last 4-hour close (" + fmt(os.close, 2) + ") is " + (os.close < os.ema20 ? "below" : "above") + " the 20 EMA, so they disagree.";
+      var head = el("div", null, [
+        el("p", { style: "margin:0 0 6px" }, [el("strong", { text: "4-hour trend: " + tw }), " — " + why]),
+        os.news ? el("p", { cls: "neg", style: "margin:0 0 6px", text: "Paused for US news: " + os.news + " (no new orders, waiting ones cancelled, " + "within 30 minutes either side)." }) : null,
+        el("p", { cls: "note", style: "margin:0 0 10px", text: "Buys need an up trend, sells a down trend. Stop $" + os.stop + "; no TP: the stop moves $" + os.trail + " for every $" + os.trail +
+          " in profit until breakeven, then in $" + os.trail_be + " steps. Checked every hour; last check " + when(os.as_of) + "." })]);
+      var zt = os.zones.length ? table(["Zone", "Range", "Order", "Ready since", "Expires", "Status"], os.zones.map(function (z) {
+        return [z.side === "buy" ? "Demand" : "Supply", fmt(z.lo, 2) + " – " + fmt(z.hi, 2), (z.side === "buy" ? "Buy" : "Sell") + " limit " + fmt(z.edge, 2),
+          when(z.ready), when(z.expires), z.active ? el("strong", { text: z.why }) : z.why];
+      })) : empty("No fresh zones right now. A zone forms after a 1-hour candle is followed by a strong move away from it.");
+      v.appendChild(block("Own signals", "The tracker’s own setups: a limit at the edge of a fresh 1-hour supply or demand zone when the 4-hour trend points the same way. Orders and results also appear above and under the channel “Own signals”.",
+        el("div", null, [head, zt])));
+    }
+  }
   function viewLive(v) {
     var set = DATA.settings || {}, ph = set.pending_expiry_hours || 4, fm = set.followup_minutes || 5;
     var rows = pool(), now = Date.now();
     var open = rows.filter(function (t) { return t.status === "open"; }).sort(function (a, b) { return a.fill_at < b.fill_at ? 1 : -1; });
     var waiting = rows.filter(function (t) { return t.status === "pending"; }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
     var inc = SIGS.filter(function (t) { return t.status === "incomplete"; });
+    var sigById = {};
+    SIGS.forEach(function (t) { sigById[t.id] = t; });
     v.appendChild(el("dl", { cls: "kpis" }, [["Open positions", open.length], ["Waiting to fill", waiting.length], ["Awaiting SL or TP", inc.length]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })));
+    ownStatus(v);
     var mh = set.max_trade_hours || 72;
     v.appendChild(block("Open positions", "Closed at market if neither the TP nor the SL is hit within " + mh + " hours of market time.", open.length ? table(["Channel", "Position", "Side", "Entry", "Posted date", "Posted time", "Filled at", "Fill date", "Fill time", "SL", "TP", "Status", "In trade for"],
       open.map(function (t) { return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.entry, dateOnly(t.posted_at), timeOnly(t.posted_at), t.fill_price,
@@ -815,7 +838,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       { num: [6, 12] }) : empty("Nothing open right now. New positions appear here as soon as a channel’s signal fills.")));
     v.appendChild(block("Waiting to fill", "Cancelled as not filled if price doesn’t reach the entry within " + ph + " hours.", waiting.length ? table(["Channel", "Position", "Side", "Order type", "Entry", "SL", "TP", "Posted date", "Posted time", "Expires in"],
       waiting.map(function (t) {
-        var start = new Date(t.complete_at || t.posted_at).getTime(), left = (start + ph * 3600000 - now) / 60000;
+        var sg = sigById[t.trade_id], em = sg && sg.meta && sg.meta.expiry_min;
+        var start = new Date(t.complete_at || t.posted_at).getTime(), left = (start + (em ? em * 60000 : ph * 3600000) - now) / 60000;
         return [t.grp, t.leg + " of " + t.legs, sideCell(t), t.order_type, t.entry, t.sl_initial, t.tp == null ? "none" : t.tp,
           dateOnly(t.posted_at), timeOnly(t.posted_at), left > 0 ? dur(left) : "due"];
       }), { num: [9] }) : empty("No orders waiting.")));
