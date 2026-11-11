@@ -160,7 +160,9 @@ button.action:hover { border-color: var(--gold); }
 .back { margin-bottom: 10px; display: inline-block; }
 
 /* Unlock screen (website) */
-body.locked main > :not(#unlock) { display: none; }
+body.locked main > :not(#unlock):not(#loading) { display: none; }
+#loading { max-width: 420px; margin: 14vh auto 0; }
+#loading p { color: var(--muted); margin-top: 8px; }
 #unlock { max-width: 420px; margin: 14vh auto 0; }
 #unlock p { color: var(--muted); margin-top: 8px; }
 #unlock input[type=password] { display: block; width: 100%; font: inherit; color: var(--ink); background: var(--surface);
@@ -173,6 +175,10 @@ body.locked main > :not(#unlock) { display: none; }
 </head>
 <body class="locked">
 <main>
+  <div id="loading" hidden>
+    <h1><span class="mark" aria-hidden="true"></span>Gold signal tracker</h1>
+    <p>Opening the dashboard… this can take a few seconds on a phone.</p>
+  </div>
   <form id="unlock" hidden>
     <h1><span class="mark" aria-hidden="true"></span>Gold signal tracker</h1>
     <p>Enter your password to open the dashboard.</p>
@@ -1065,7 +1071,7 @@ body.locked main > :not(#unlock) { display: none; }
   var SRC = "https://raw.githubusercontent.com/MagotoA/XAUUSD-tracker/data/data.json", EVERY_MIN = 3, KEY = "gst-password";
   var form = document.getElementById("unlock"), pw = document.getElementById("pw"),
       remember = document.getElementById("remember"), err = document.getElementById("unlock-error"),
-      lockBtn = document.getElementById("lock");
+      lockBtn = document.getElementById("lock"), loading = document.getElementById("loading");
   var cache = {}, password = null, lastStamp = null;
 
   function b64(s) { var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
@@ -1081,7 +1087,11 @@ body.locked main > :not(#unlock) { display: none; }
     return k;
   }
   async function load(pass, src) {
-    var r = await fetch((src || SRC) + "?t=" + Date.now(), { cache: "no-store" });
+    var ctl = window.AbortController ? new AbortController() : null, r;
+    var timer = ctl && setTimeout(function () { ctl.abort(); }, 60000);
+    try { r = await fetch((src || SRC) + "?t=" + Date.now(), { cache: "no-store", signal: ctl ? ctl.signal : undefined }); }
+    catch (e) { throw { kind: "fetch", msg: "The data couldn't be downloaded (no connection, or it took over a minute). Try again." }; }
+    finally { if (timer) clearTimeout(timer); }
     if (!r.ok) throw { kind: "fetch", msg: "The data file couldn't be downloaded (HTTP " + r.status + "). The tracker may not have published yet." };
     var blob = await r.json(), plain;
     try {
@@ -1091,13 +1101,13 @@ body.locked main > :not(#unlock) { display: none; }
     return JSON.parse(text);
   }
   function show(data) {
-    document.body.classList.remove("locked"); form.hidden = true; lockBtn.hidden = false;
+    document.body.classList.remove("locked"); form.hidden = true; loading.hidden = true; lockBtn.hidden = false;
     if (data.generated_at === lastStamp) return;
     lastStamp = data.generated_at;
     GST.start(data, "This page checks for new data every " + EVERY_MIN + " minutes; updates can take about 5 minutes to appear.");
   }
   function locked(message) {
-    document.body.classList.add("locked"); form.hidden = false; lockBtn.hidden = true;
+    document.body.classList.add("locked"); form.hidden = false; loading.hidden = true; lockBtn.hidden = true;
     err.textContent = message || ""; pw.focus();
   }
   async function open(pass, fromForm) {
@@ -1122,7 +1132,7 @@ body.locked main > :not(#unlock) { display: none; }
   });
   if (!window.crypto || !crypto.subtle || !window.DecompressionStream) {
     locked("This browser is too old to open the dashboard. Use a recent Chrome, Edge, Safari or Firefox.");
-  } else if (stored()) { document.body.classList.add("locked"); open(stored(), false); }
+  } else if (stored()) { document.body.classList.add("locked"); loading.hidden = false; open(stored(), false); }
   else locked("");
 })();
 </script>
