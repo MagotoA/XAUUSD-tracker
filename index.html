@@ -697,9 +697,8 @@ body.locked main > :not(#unlock) { display: none; }
   function cpool() { return CLEGS.filter(function (t) { return state.bf || t.source !== "backfill"; }); }
   function viewConsensus(v) {
     var LAD = "Consensus ladder";
-    var skipped = function (t) {   // never traded in MT5: a stop over the limit (consensus), or found too late (both)
-      var why = t.status === "invalid" ? t.exit_reason || "" : "";
-      return /^not traded: found late/.test(why) || (t.grp !== LAD && /^not traded: stop/.test(why));
+    var skipped = function (t) {   // never traded in MT5 (stop over the limit, found late, max_open, ...): not shown
+      return t.status === "invalid" && /^not traded:/.test(t.exit_reason || "");
     };
     var both = cpool().filter(function (t) { return !skipped(t); }), rows = both.filter(function (t) { return t.grp !== LAD; }), lad = both.filter(function (t) { return t.grp === LAD; });
     var m = metrics(rows), ml = metrics(lad), now = Date.now(), set = DATA.settings || {}, ph = set.pending_expiry_hours || 4;
