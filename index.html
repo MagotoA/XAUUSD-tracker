@@ -202,7 +202,7 @@ body.locked main > :not(#unlock) { display: none; }
   "use strict";
   var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], CLEGS = [], CSIGS = [], NOTE = "";
   var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["analytics", "Analytics"], ["history", "History"]];
-  var OUTCOMES = ["TP hit", "Stop loss", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
+  var OUTCOMES = ["TP hit", "Stop loss", "Trailing stop", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
   // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
   function readState() {
@@ -273,7 +273,7 @@ body.locked main > :not(#unlock) { display: none; }
   function sideCell(t) { return el("span", { cls: t.side, text: t.side === "buy" ? "Buy" : "Sell" }); }
   function rCell(r) { return r == null ? "" : el("span", { cls: r > 0 ? "win" : r < 0 ? "loss" : "", text: signed(r, 2) }); }
   function outcomeGroup(t) {
-    if (t.status === "closed") return { tp: "TP hit", sl: "Stop loss", breakeven: "Breakeven stop", manual: "Closed by channel", timeout: "Timed out" }[t.exit_reason] || "Closed";
+    if (t.status === "closed") return { tp: "TP hit", sl: "Stop loss", breakeven: "Breakeven stop", manual: "Closed by channel", timeout: "Timed out", trail: "Trailing stop" }[t.exit_reason] || "Closed";
     if (t.status === "open") return "Open";
     if (t.status === "pending") return "Waiting for entry";
     if (t.status === "not_filled") return "Not filled";
