@@ -702,7 +702,27 @@ body.locked main > :not(#unlock) { display: none; }
     };
     var both = cpool().filter(function (t) { return !skipped(t); }), rows = both.filter(function (t) { return t.grp !== LAD; }), lad = both.filter(function (t) { return t.grp === LAD; });
     var m = metrics(rows), ml = metrics(lad), now = Date.now(), set = DATA.settings || {}, ph = set.pending_expiry_hours || 4;
-    var sigs = CSIGS.filter(function (t) { return t.grp !== LAD && !skipped(t) && (state.bf || t.source !== "backfill"); }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
+    var ladBy = {};
+    CSIGS.forEach(function (t) { if (t.grp === LAD) ladBy[t.id] = t; });
+    var ladFor = function (s) { return ladBy[String(s.id).replace(/^0_/, "1_")]; };   // the ladder order of this consensus
+    // a consensus is listed when MT5 traded it or its ladder order
+    var sigs = CSIGS.filter(function (t) {
+      if (t.grp === LAD || !(state.bf || t.source !== "backfill")) return false;
+      var l = ladFor(t);
+      return !skipped(t) || (l && !skipped(l));
+    }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
+    var resultOf = function (t) {
+      if (skipped(t)) return "Not traded";
+      var ls = CLEGS.filter(function (l) { return l.trade_id === t.id; });
+      return Array.from(new Set(ls.map(function (l) { return l.status === "closed" ? (l.exit_reason === "tp" ? "TP" + l.leg + " ✓" : outcomeGroup(l)) : outcomeGroup(l); }))).join(", ");
+    };
+    var ladCell = function (s) {
+      var l = ladFor(s);
+      if (!l) return "–";
+      var moves = ((l.meta && l.meta.moves) || []).length;
+      return (l.side === "buy" ? "Buy" : "Sell") + " limit " + l.entry + (moves ? " (moved " + moves + "×)" : "") +
+        ", SL " + l.sl_initial + ", TP " + (l.tp_text || "–") + " · " + resultOf(l);
+    };
     var rule = (CSIGS[0] && CSIGS[0].meta && CSIGS[0].meta.rule) || "2 or more independent channels call the same direction within 30 minutes, with entries within $3 of each other and no opposing call";
     v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch" , text:
       "A consensus signal forms when " + rule + ". Channels that copy each other count once. Its trade uses the median entry and TP1 of the agreeing signals with a stop 100 pips ($10) from the entry, and is scored from the moment the consensus formed. Follow it on a demo account until it has about 30 closed signals of its own." }));
@@ -756,12 +776,11 @@ body.locked main > :not(#unlock) { display: none; }
         return lineChart([{ name: "Consensus", pts: cumulative(closed), strong: true, color: "var(--gold)" }, { name: "Ladder", pts: cumulative(lclosed) }], { unit: "R", label: "Cumulative result of consensus and ladder trades in R", emptyText: "The chart starts once consensus trades close." }, w);
       })]))
     ]));
-    v.appendChild(block("Consensus signals", null, sigs.length ? table(["Posted date", "Posted time", "Side", "Entry", "SL", "TPs", "Agreed by", "Result"], sigs.map(function (s) {
-      var ls = CLEGS.filter(function (l) { return l.trade_id === s.id; });
-      var res = ls.map(function (l) { return l.status === "closed" ? (l.exit_reason === "tp" ? "TP" + l.leg + " ✓" : outcomeGroup(l)) : outcomeGroup(l); });
+    v.appendChild(block("Consensus signals", "Each consensus with its ladder order (best entry, $10 stop, the consensus TP1). \u201cNot traded\u201d: MT5 didn't take that order.",
+      sigs.length ? table(["Posted date", "Posted time", "Side", "Entry", "SL", "TPs", "Agreed by", "Result", "Ladder order"], sigs.map(function (s) {
       var who = ((s.meta && s.meta.supporters) || []).map(function (x) { return x.grp; }).join(", ");
-      return [dateOnly(s.posted_at), timeOnly(s.posted_at), sideCell(s), s.entry, s.sl_initial, s.tp_text || "", who, Array.from(new Set(res)).join(", ")];
-    }), { wrap: [6, 7] }) : empty("No consensus signals yet" + (state.bf ? "." : ". Tick Include backfill to see consensus from the backfilled weeks."))));
+      return [dateOnly(s.posted_at), timeOnly(s.posted_at), sideCell(s), s.entry, s.sl_initial, s.tp_text || "", who, resultOf(s), ladCell(s)];
+    }), { wrap: [6, 7, 8] }) : empty("No consensus signals yet" + (state.bf ? "." : ". Tick Include backfill to see consensus from the backfilled weeks."))));
     var log = both.slice().sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : (a.leg || 0) - (b.leg || 0); });
     var dl = el("button", { cls: "action", text: "Download CSV", on: { click: function () {
       var data = [HCOLS].concat(log.map(function (t) { return hRow(t, true); }));
