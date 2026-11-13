@@ -207,7 +207,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
 (function () {
   "use strict";
   var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], CLEGS = [], CSIGS = [], NOTE = "";
-  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["account", "Live account"], ["analytics", "Analytics"], ["history", "History"]];
+  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["account", "Live account"], ["best3", "Best of 3"], ["analytics", "Analytics"], ["history", "History"]];
   var OUTCOMES = ["TP hit", "Stop loss", "Trailing stop", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
   // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
@@ -800,6 +800,45 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : empty("No consensus positions yet."), dl));
   }
 
+  function viewBest3(v) {   // Best of 3 WoW: last week's three best channels, copied this week (its own MT5 account)
+    var b = DATA.best3;
+    if (!b) { v.appendChild(empty("Best of 3 WoW isn’t running.")); return; }
+    var cur = b.currency || "", rows = b.trades || [], caps = b.caps || [3, 2, 1];
+    var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
+    var mcell = function (x) { return x == null ? "" : el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: money(x) }); };
+    var done = rows.filter(function (x) { return x.profit != null; }), wk = done.filter(function (x) { return b.week && x.at >= b.week; });
+    var sumP = function (a) { return sum(a.map(function (x) { return x.profit; })); };
+    var who = function (x) { return "#" + x.rank + " " + x.grp; };
+    v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
+      "Every Monday the channels are ranked by last week’s net R (3+ signals, positive only), and this week every signal of the top three is copied into a separate MT5 account" +
+      (b.server ? " (" + b.server + ", account " + (b.account || "") + ")" : "") + ": 1st up to TP" + caps[0] + ", 2nd up to TP" + caps[1] + ", 3rd TP" + caps[2] +
+      ", one position per TP, " + b.lots + " lots each, at most " + b.max_open + " open, daily loss limit " + b.day_limit + "%. Stops follow the channel (moved to breakeven, closed early). Results are the broker’s; running profit shows in MT5. Last change " + when(b.updated) + "." }));
+    v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [
+      ["Balance", b.balance == null ? "–" : b.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur],
+      ["This week net", wk.length ? money(sumP(wk)) : "–"], ["This week closed", wk.length], ["Win rate (week)", pct(wk.filter(function (x) { return x.profit > 0; }).length, wk.length)],
+      ["Open or waiting", rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting"; }).length], ["All-time net", done.length ? money(sumP(done)) : "–"]].map(function (k) {
+      return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })));
+    v.appendChild(block("This week’s channels", "Week of " + (b.week || "–") + ", ranked by last week’s results.", (b.ranking || []).length ? table(
+      ["Rank", "Channel", "Copies", "Last week", "Signals", "Win rate"], b.ranking.map(function (r, i) {
+        return [String(i + 1), r.grp, r.cap > 1 ? "TP1–TP" + r.cap : "TP1", signed(r.net, 1) + "R", r.signals, pct(Math.round(r.win * 100), 100)]; }), { num: [3, 4, 5] })
+      : empty("No channel qualified last week (3+ signals and a positive net R).")));
+    var act = rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Closing"; });
+    v.appendChild(block("Open and waiting", "", act.length ? table(["Date", "Time", "Channel", "Side", "TP", "Order", "Entry", "SL", "TP price", "Status"],
+      act.map(function (x) { return [dateOnly(x.at), timeOnly(x.at), who(x), sideCell(x), "TP" + x.tp_no, x.kind, x.entry, x.sl, x.tp, x.status]; }), { num: [6, 7, 8] })
+      : empty("Nothing open or waiting.")));
+    var cl = rows.filter(function (x) { return x.profit != null; }).slice(0, 80);
+    v.appendChild(block("Closed", "Newest first.", cl.length ? table(["Date", "Time", "Channel", "Side", "TP", "Entry", "Exit", "How", "Profit"],
+      cl.map(function (x) { return [dateOnly(x.at), timeOnly(x.at), who(x), sideCell(x), "TP" + x.tp_no, x.entry, x.exit, x.note || "", mcell(x.profit)]; }), { num: [5, 6, 8] })
+      : empty("No closed positions yet.")));
+    var hist = (b.history || []).slice().reverse().map(function (h, i, arr) {
+      var end = i > 0 ? arr[i - 1].week : "9999", c = done.filter(function (x) { return x.at >= h.week && x.at < end; });
+      return [h.week, (h.channels || []).join(", ") || "–", c.length, pct(c.filter(function (x) { return x.profit > 0; }).length, c.length), c.length ? mcell(sumP(c)) : "–"];
+    });
+    v.appendChild(block("Week by week", "", hist.length ? table(["Week of", "Channels", "Closed", "Win rate", "Net"], hist, { num: [2, 3, 4] }) : empty("No weeks yet.")));
+    var nc = rows.filter(function (x) { return x.status === "Not copied"; }).slice(0, 40);
+    if (nc.length) v.appendChild(block("Signals not copied", "", table(["Date", "Time", "Channel", "Side", "Why"],
+      nc.map(function (x) { return [dateOnly(x.at), timeOnly(x.at), who(x), sideCell(x), x.note || ""]; }), { wrap: [4] })));
+  }
   function viewAccount(v) {   // the live MT5 account (live_trader.py): its own orders and the broker's results
     var lt = DATA.livetrades;
     if (!lt) { v.appendChild(empty("The live trader isn’t running.")); return; }
@@ -1003,13 +1042,16 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var cLive = cpool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
     var nav = document.getElementById("nav");
     nav.textContent = "";
+    var b3Open = DATA.best3 ? (DATA.best3.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Waiting"; }).length : 0;
     var lt = DATA.livetrades, lOpen = lt ? (lt.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length : 0;
     VIEWS.forEach(function (x) {
       if (x[0] === "account" && !lt) return;   // only when the live trader runs
+      if (x[0] === "best3" && !DATA.best3) return;   // only when Best of 3 WoW runs
       var b = el("button", { "aria-current": state.v === x[0] ? "page" : null, on: { click: function () { go({ v: x[0], c: x[0] === "channels" ? state.c : "" }); } } },
         [x[1], x[0] === "live" && live ? el("span", { cls: "count", text: String(live) }) : null,
          x[0] === "consensus" && cLive ? el("span", { cls: "count", text: String(cLive) }) : null,
-         x[0] === "account" && lOpen ? el("span", { cls: "count", text: String(lOpen) }) : null]);
+         x[0] === "account" && lOpen ? el("span", { cls: "count", text: String(lOpen) }) : null,
+         x[0] === "best3" && b3Open ? el("span", { cls: "count", text: String(b3Open) }) : null]);
       nav.appendChild(b);
     });
   }
@@ -1081,7 +1123,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var v = document.getElementById("view");
     v.textContent = "";
     POST = [];
-    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
+    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, best3: viewBest3, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
     POST.forEach(function (f) { f(); });
   }
   var lastW = window.innerWidth, resizeT = null;
