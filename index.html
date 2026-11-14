@@ -215,7 +215,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var p = new URLSearchParams(location.hash.slice(1));
     return { v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
              s: p.get("s") || "totalR", d: p.get("d") !== "0", hc: p.get("hc") || "", ho: p.get("ho") || "", hs: p.get("hs") || "",
-             hf: p.get("hf") || "", ht: p.get("ht") || "", hb: p.get("hb") || "posted", om: parseInt(p.get("om") || "0", 10) || 0 };
+             hf: p.get("hf") || "", ht: p.get("ht") || "", hb: p.get("hb") || "posted", om: parseInt(p.get("om") || "0", 10) || 0, la: parseInt(p.get("la") || "0", 10) || 0 };
   }
   var state = readState();
   function save() {
@@ -229,6 +229,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["hc", "ho", "hs", "hf", "ht"].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
     if (state.hb !== "posted") p.set("hb", state.hb);
     if (state.om) p.set("om", String(state.om));
+    if (state.la) p.set("la", String(state.la));
     history.replaceState(null, "", "#" + p.toString());
   }
   function go(changes, keepScroll) { Object.assign(state, changes); save(); render(); if (!keepScroll) window.scrollTo(0, 0); }
@@ -809,12 +810,19 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var done = rows.filter(function (x) { return x.profit != null; }), wk = done.filter(function (x) { return b.week && x.at >= b.week; });
     var sumP = function (a) { return sum(a.map(function (x) { return x.profit; })); };
     var who = function (x) { return "#" + x.rank + " " + x.grp; };
-    v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
+    if (b.paper) v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
+      "Paper trading: nothing is placed in MT5. Each week (Sunday 23:00 Nairobi) the channels are ranked by last week’s net R (3+ signals, positive only)" +
+      (b.reranked || (b.history || []).some(function (h) { return h.monday_channels; }) ? " and re-checked at Monday close" : "") +
+      "; every live signal of the top three that week is copied on paper from the tracker’s own scoring (demo MT5 prices, after costs): 1st up to TP" + caps[0] +
+      ", 2nd up to TP" + caps[1] + ", 3rd TP" + caps[2] + ", one position per TP, " + b.lots + " lots each. Not modelled: the " + b.max_open +
+      "-position limit, the " + b.day_limit + "% daily loss limit and the spread check. Counting from the week of " + (b.start || "–") + ". Last change " + when(b.updated) + "." }));
+    else v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
       "Every Monday the channels are ranked by last week’s net R (3+ signals, positive only), and this week every signal of the top three is copied into a separate MT5 account" +
       (b.server ? " (" + b.server + ", account " + (b.account || "") + ")" : "") + ": 1st up to TP" + caps[0] + ", 2nd up to TP" + caps[1] + ", 3rd TP" + caps[2] +
       ", one position per TP, " + b.lots + " lots each, at most " + b.max_open + " open, daily loss limit " + b.day_limit + "%. Stops follow the channel (moved to breakeven, closed early). Results are the broker’s; running profit shows in MT5. Last change " + when(b.updated) + "." }));
     v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [
-      ["Balance", b.balance == null ? "–" : b.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur],
+      b.paper ? ["Avg R per position", b.summary && b.summary.avg_r != null ? signed(b.summary.avg_r, 2) + "R" : "–"]
+        : ["Balance", b.balance == null ? "–" : b.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur],
       ["This week net", wk.length ? money(sumP(wk)) : "–"], ["This week closed", wk.length], ["Win rate (week)", pct(wk.filter(function (x) { return x.profit > 0; }).length, wk.length)],
       ["Open or waiting", rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting"; }).length], ["All-time net", done.length ? money(sumP(done)) : "–"]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })));
@@ -832,23 +840,40 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       : empty("No closed positions yet.")));
     var hist = (b.history || []).slice().reverse().map(function (h, i, arr) {
       var end = i > 0 ? arr[i - 1].week : "9999", c = done.filter(function (x) { return x.at >= h.week && x.at < end; });
-      return [h.week, (h.channels || []).join(", ") || "–", c.length, pct(c.filter(function (x) { return x.profit > 0; }).length, c.length), c.length ? mcell(sumP(c)) : "–"];
+      var mon = h.monday_channels && h.monday_channels.join(", ") !== (h.channels || []).join(", ") ? " → after Monday: " + (h.monday_channels.join(", ") || "none") : "";
+      return [h.week, ((h.channels || []).join(", ") || "–") + mon, c.length, pct(c.filter(function (x) { return x.profit > 0; }).length, c.length), c.length ? mcell(sumP(c)) : "–"];
     });
     v.appendChild(block("Week by week", "", hist.length ? table(["Week of", "Channels", "Closed", "Win rate", "Net"], hist, { num: [2, 3, 4] }) : empty("No weeks yet.")));
     var nc = rows.filter(function (x) { return x.status === "Not copied"; }).slice(0, 40);
     if (nc.length) v.appendChild(block("Signals not copied", "", table(["Date", "Time", "Channel", "Side", "Why"],
       nc.map(function (x) { return [dateOnly(x.at), timeOnly(x.at), who(x), sideCell(x), x.note || ""]; }), { wrap: [4] })));
   }
-  function viewAccount(v) {   // the live MT5 account (live_trader.py): its own orders and the broker's results
-    var lt = DATA.livetrades;
-    if (!lt) { v.appendChild(empty("The live trader isn’t running.")); return; }
+  function liveAccounts() {   // [live], [live2] ... (live_trader.py --account N); older exports have only livetrades
+    return DATA.liveaccounts && DATA.liveaccounts.length ? DATA.liveaccounts : (DATA.livetrades ? [DATA.livetrades] : []);
+  }
+  function viewAccount(v) {   // the live MT5 accounts (live_trader.py): each one's own orders and the broker's results
+    var accts = liveAccounts();
+    if (!accts.length) { v.appendChild(empty("The live trader isn’t running.")); return; }
+    var ix = Math.min(Math.max(state.la || 0, 0), accts.length - 1), lt = accts[ix];
+    if (accts.length > 1) {
+      var sel = el("select", { id: "live-account", "aria-label": "Live account", on: { change: function (e) { go({ la: parseInt(e.target.value, 10) || 0 }, true); } } },
+        accts.map(function (a, i) {
+          var open = (a.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length;
+          return el("option", { value: String(i), text: (a.label || ("Live " + (i + 1))) + " · account " + (a.account || "?") +
+            (a.balance != null ? " · " + a.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + (a.currency || "") : "") +
+            (open ? " · " + open + " open" : "") });
+        }));
+      sel.value = String(ix);
+      v.appendChild(el("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px" },
+        [el("label", { "for": "live-account", cls: "note", text: "Account" }), sel]));
+    }
     var at = (lt.trades || []).slice().sort(function (a, b) { return (a.at || "") < (b.at || "") ? 1 : -1; }), cur = lt.currency || "";
     var placed = at.filter(function (x) { return x.ticket; }), done = at.filter(function (x) { return x.profit != null && x.exit_time; });
     var net = sum(done.map(function (x) { return x.profit; })), wins = done.filter(function (x) { return x.profit > 0; }).length;
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
     var openN = at.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length;
     v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
-      "Your live account (" + (lt.server || "") + ", account " + (lt.account || "") + "). It copies the demo’s " + (lt.orders || []).join(" and ") +
+      (lt.label ? lt.label + ": your" : "Your") + " live account (" + (lt.server || "") + ", account " + (lt.account || "") + "). It copies the demo’s " + (lt.orders || []).join(" and ") +
       " orders (never own signals) with its own size and limits: " + lt.lots_per_1000 + " lots per $1,000 of balance, at least " + lt.min_lots +
       " (" + lt.lots_now + " lots now), at most " + lt.max_open + " open or pending, daily loss limit " + lt.day_limit + "%. Results are the broker’s, in " + cur +
       "; open trades’ running profit shows in MT5. Last change " + when(lt.updated) + "." }));
@@ -1043,7 +1068,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var nav = document.getElementById("nav");
     nav.textContent = "";
     var b3Open = DATA.best3 ? (DATA.best3.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Waiting"; }).length : 0;
-    var lt = DATA.livetrades, lOpen = lt ? (lt.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length : 0;
+    var lts = liveAccounts(), lt = lts.length ? lts[0] : null, lOpen = 0;
+    lts.forEach(function (a) { lOpen += (a.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length; });
     VIEWS.forEach(function (x) {
       if (x[0] === "account" && !lt) return;   // only when the live trader runs
       if (x[0] === "best3" && !DATA.best3) return;   // only when Best of 3 WoW runs
