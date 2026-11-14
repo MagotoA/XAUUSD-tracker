@@ -42,6 +42,7 @@ header.top { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center
 .asof { color: var(--muted); font-size: 13px; margin-top: 6px; max-width: 72ch; }
 .controls { display: flex; gap: 18px; align-items: center; }
 label.toggle { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; color: var(--muted); font-size: 14px; }
+label.toggle.off { opacity: .45; cursor: default; }
 input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--gold); margin: 0; }
 nav.tabs { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--rule);
   display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 -20px; padding: 0 20px; }
@@ -838,8 +839,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       bsel.value = state.bv || !b ? "1" : "0";
       v.appendChild(el("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px" },
         [el("label", { "for": "b3-strategy", cls: "note", text: "Strategy" }), bsel]));
+      v.appendChild(b3BackfillNote());
       if (state.bv || !b) { viewBandit(v); return; }
-    }
+    } else v.appendChild(b3BackfillNote());
     if (!b) { v.appendChild(empty("Best of 3 WoW isn’t running.")); return; }
     var cur = b.currency || "", rows = b.trades || [], caps = b.caps || [3, 2, 1];
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
@@ -884,6 +886,12 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var nc = rows.filter(function (x) { return x.status === "Not copied"; }).slice(0, 40);
     if (nc.length) v.appendChild(block("Signals not copied", "", table(["Date", "Time", "Channel", "Side", "Why"],
       nc.map(function (x) { return [dateOnly(x.at), timeOnly(x.at), who(x), sideCell(x), x.note || ""]; }), { wrap: [4] })));
+  }
+  function b3BackfillNote() {   // why "Include backfill" doesn't change this tab
+    return el("p", { cls: "note", style: "margin-bottom:12px;max-width:80ch", text:
+      "“Include backfill” doesn’t apply to this tab. Best of 3 shows real orders on its own MT5 demo, and the channel bandit counts results only from live signals " +
+      "(since 9 Nov): backfilled signals were found after the fact and could never have been copied. They only feed the bandit’s beliefs, at half weight. " +
+      "The 9-week backtest that includes backfill is in Best of 3 WoW\\README.md (about +349R for Best of 3, +348R for the bandit; backfill flatters both)." });
   }
   function viewBandit(v) {   // Best of 3 WoW's channel bandit (bandit.py): explore/exploit channel picks, paper only
     var k = DATA.bandit, rows = k.trades || [], caps = k.caps || [3, 2, 1], st = k.settings || {};
@@ -1137,7 +1145,11 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     document.getElementById("asof").textContent = "Data as of " + (DATA.generated_at ? when(DATA.generated_at) : "unknown") +
       ". Results are after costs ($" + fmt(c.spread, 2) + " spread, $" + fmt(c.slippage, 2) + " slippage per oz). " + windowNote() + NOTE;
     olderButton();
-    document.getElementById("bf").checked = state.bf;
+    var bfEl = document.getElementById("bf"), bfOff = state.v === "best3" || state.v === "account";
+    bfEl.checked = state.bf;
+    bfEl.disabled = bfOff;   // these tabs show real orders and live signals only: the box doesn't apply
+    bfEl.parentNode.classList.toggle("off", bfOff);
+    bfEl.parentNode.title = bfOff ? "Not used on this tab: it shows only real orders and live signals." : "";
     var live = pool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
     var cLive = cpool().filter(function (t) { return t.status === "open" || t.status === "pending"; }).length;
     var nav = document.getElementById("nav");
