@@ -818,7 +818,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       ["This week net", wk.length ? money(sumP(wk)) : "–"], ["This week closed", wk.length], ["Win rate (week)", pct(wk.filter(function (x) { return x.profit > 0; }).length, wk.length)],
       ["Open or waiting", rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting"; }).length], ["All-time net", done.length ? money(sumP(done)) : "–"]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })));
-    v.appendChild(block("This week’s channels", "Week of " + (b.week || "–") + ", ranked by last week’s results.", (b.ranking || []).length ? table(
+    v.appendChild(block("This week’s channels", "Week of " + (b.week || "–") + (b.reranked ? ", re-checked at Monday close on last week + Monday." : ", ranked by last week’s results."), (b.ranking || []).length ? table(
       ["Rank", "Channel", "Copies", "Last week", "Signals", "Win rate"], b.ranking.map(function (r, i) {
         return [String(i + 1), r.grp, r.cap > 1 ? "TP1–TP" + r.cap : "TP1", signed(r.net, 1) + "R", r.signals, pct(Math.round(r.win * 100), 100)]; }), { num: [3, 4, 5] })
       : empty("No channel qualified last week (3+ signals and a positive net R).")));
