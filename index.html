@@ -58,6 +58,15 @@ nav.tabs .count { display: inline-block; min-width: 20px; padding: 0 6px; margin
 .scope { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 18px; }
 .scope .chip { background: var(--chip); border-radius: 999px; padding: 2px 10px; font-size: 13px; color: var(--muted); }
 section.block { margin-top: 32px; }
+/* collapse / expand: the arrow in each section's title */
+.fold { all: unset; cursor: pointer; display: inline-flex; align-items: baseline; gap: 8px; }
+.fold:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+.fold .arrow { display: inline-block; width: 1em; font-size: .75em; color: var(--muted); }
+section.block.folded .fold .arrow { transform: rotate(-90deg); }
+section.block.folded > :not(.block-head), section.block.folded .block-head > :not(h2) { display: none; }
+section.block.folded .block-head { margin-bottom: 0; }
+.foldbar { display: flex; gap: 16px; justify-content: flex-end; font-size: 13px; margin-bottom: -12px; }
+@media (prefers-reduced-motion: no-preference) { .fold .arrow { transition: transform .15s; } }
 .block-head { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 32px 40px; }
 .grid2 { margin-top: 32px; }
@@ -274,8 +283,26 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function byExit(a, b) { return (a.exit_at || "") < (b.exit_at || "") ? -1 : (a.exit_at || "") > (b.exit_at || "") ? 1 : 0; }
   function cls(x) { return x > 0 ? "pos" : x < 0 ? "neg" : ""; }
   function empty(text) { return el("p", { cls: "empty", text: text }); }
+  // sections fold open and shut with the arrow by their title; the choice is remembered on this device
+  var FOLD = (function () { try { return JSON.parse(localStorage.getItem("gst_fold") || "{}") || {}; } catch (e) { return {}; } })();
+  function saveFold() { try { localStorage.setItem("gst_fold", JSON.stringify(FOLD)); } catch (e) {} }
+  function setFold(sec, folded) {
+    var b = sec.querySelector(".fold"), k = b && b.getAttribute("data-key");
+    sec.classList.toggle("folded", folded);
+    if (b) b.setAttribute("aria-expanded", folded ? "false" : "true");
+    if (k) { if (folded) FOLD[k] = 1; else delete FOLD[k]; }
+  }
   function block(title, note, body, extra) {
-    return el("section", { cls: "block" }, [el("div", { cls: "block-head" }, [el("h2", { text: title }), note ? el("p", { cls: "note", text: note }) : null, extra || null]), body]);
+    var key = state.v + "|" + title, sec;
+    var btn = el("button", { cls: "fold", type: "button", "data-key": key, "aria-expanded": FOLD[key] ? "false" : "true",
+      on: { click: function () {
+        var folding = !sec.classList.contains("folded");
+        setFold(sec, folding); saveFold();
+        if (!folding) render();   // charts in a section that was shut are drawn again at their real width
+      } } }, [el("span", { cls: "arrow", "aria-hidden": "true", text: "▾" }), title]);
+    sec = el("section", { cls: "block" + (FOLD[key] ? " folded" : "") },
+      [el("div", { cls: "block-head" }, [el("h2", null, [btn]), note ? el("p", { cls: "note", text: note }) : null, extra || null]), body]);
+    return sec;
   }
   function sideCell(t) { return el("span", { cls: t.side, text: t.side === "buy" ? "Buy" : "Sell" }); }
   function rCell(r) { return r == null ? "" : el("span", { cls: r > 0 ? "win" : r < 0 ? "loss" : "", text: signed(r, 2) }); }
@@ -1150,6 +1177,13 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     v.textContent = "";
     POST = [];
     ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, best3: viewBest3, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
+    var secs = v.querySelectorAll("section.block");
+    if (secs.length > 1) {   // collapse or expand every section of this tab at once
+      var all = function (folded) { v.querySelectorAll("section.block").forEach(function (s) { setFold(s, folded); }); saveFold(); if (!folded) render(); };
+      v.insertBefore(el("div", { cls: "foldbar" }, [
+        el("button", { cls: "link", type: "button", on: { click: function () { all(true); } } }, ["Collapse all"]),
+        el("button", { cls: "link", type: "button", on: { click: function () { all(false); } } }, ["Expand all"])]), v.firstChild);
+    }
     POST.forEach(function (f) { f(); });
   }
   var lastW = window.innerWidth, resizeT = null;
