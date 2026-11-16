@@ -225,7 +225,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var p = new URLSearchParams(location.hash.slice(1));
     return { v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
              s: p.get("s") || "totalR", d: p.get("d") !== "0", hc: p.get("hc") || "", ho: p.get("ho") || "", hs: p.get("hs") || "",
-             hf: p.get("hf") || "", ht: p.get("ht") || "", hb: p.get("hb") || "posted", om: parseInt(p.get("om") || "0", 10) || 0, la: parseInt(p.get("la") || "0", 10) || 0, bv: p.get("bv") === "1" };
+             hf: p.get("hf") || "", ht: p.get("ht") || "", hb: p.get("hb") || "posted", om: parseInt(p.get("om") || "0", 10) || 0, la: parseInt(p.get("la") || "0", 10) || 0, sv: p.get("sv") || (p.get("bv") === "1" ? "bandit" : "") };
   }
   var state = readState();
   function save() {
@@ -240,7 +240,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (state.hb !== "posted") p.set("hb", state.hb);
     if (state.om) p.set("om", String(state.om));
     if (state.la) p.set("la", String(state.la));
-    if (state.bv) p.set("bv", "1");
+    if (state.sv) p.set("sv", state.sv);
     history.replaceState(null, "", "#" + p.toString());
   }
   function go(changes, keepScroll) { Object.assign(state, changes); save(); render(); if (!keepScroll) window.scrollTo(0, 0); }
@@ -830,20 +830,93 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : empty("No consensus positions yet."), dl));
   }
 
-  function viewBest3(v) {   // the Sandbox tab: strategies on trial (Best of 3 WoW on its own demo, the channel bandit on paper)
-    var b = DATA.best3;
+  function ownRows() {   // own signals' MT5 orders: on the Sandbox demo since 16 Nov (own_sandbox), before that on the Pepperstone demo
+    var sb = (DATA.own_sandbox && DATA.own_sandbox.trades) || [];
+    var old = (DATA.autotrades || []).filter(function (x) { return /^Own /.test(x.kind || ""); });
+    return sb.concat(old);
+  }
+  function ownLegs() {   // the tracker's own scoring of its own signals (channel "Own signals"), closed positions
+    return (DATA.legs || []).filter(function (l) { return l.grp === "Own signals" && l.status === "closed" && l.r_multiple != null; });
+  }
+  function sandboxList() {   // every strategy on trial; add new ones here
+    var b = DATA.best3, out = [];
+    if (b) out.push({ k: "best3", label: "Best of 3 WoW" + (b.paper ? " (paper)" : " (" + (b.server || "MT5 demo") + ")"), view: viewBest3One });
+    if (DATA.bandit) out.push({ k: "bandit", label: "Channel bandit (paper, self-improving)", view: viewBandit });
+    if (DATA.own_sandbox || DATA.own_status || ownRows().length || ownLegs().length)
+      out.push({ k: "own", label: "Own signals" + (DATA.own_sandbox ? " (" + (DATA.own_sandbox.server || "Sandbox demo") + ")" : ""), view: viewOwn });
+    return out;
+  }
+  function viewBest3(v) {   // the Sandbox tab: strategies on trial, one at a time or compared
+    var list = sandboxList();
     v.appendChild(el("p", { style: "margin:0 0 10px;max-width:80ch" }, [el("strong", { text: "Sandbox: " }),
       "strategies on trial before they go live. Everything here trades a demo account or paper, never real money. A strategy moves to a live account (Live account tab) only once it has proved itself here."]));
-    if (DATA.bandit) {   // the strategy choice: Best of 3 itself, or its paper channel bandit
-      var bsel = el("select", { id: "b3-strategy", "aria-label": "Strategy", on: { change: function (e) { go({ bv: e.target.value === "1" }, true); } } }, [
-        el("option", { value: "0", text: "Best of 3 WoW" + (b && !b.paper ? " (" + (b.server || "MT5") + ")" : " (paper)") }),
-        el("option", { value: "1", text: "Channel bandit (paper, self-improving)" })]);
-      bsel.value = state.bv || !b ? "1" : "0";
-      v.appendChild(el("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px" },
-        [el("label", { "for": "b3-strategy", cls: "note", text: "Strategy" }), bsel]));
-      v.appendChild(b3BackfillNote());
-      if (state.bv || !b) { viewBandit(v); return; }
-    } else v.appendChild(b3BackfillNote());
+    var cur = list.filter(function (x) { return x.k === state.sv; })[0];
+    var sel = el("select", { id: "sb-strategy", "aria-label": "Strategy", on: { change: function (e) { go({ sv: e.target.value }, true); } } },
+      [el("option", { value: "", text: "All strategies: compare" })].concat(list.map(function (x) { return el("option", { value: x.k, text: x.label }); })));
+    sel.value = cur ? cur.k : "";
+    v.appendChild(el("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px" },
+      [el("label", { "for": "sb-strategy", cls: "note", text: "Strategy" }), sel]));
+    if (!list.length) { v.appendChild(empty("No strategy is on trial right now.")); return; }
+    if (!cur) { viewSandboxCompare(v, list); return; }
+    if (cur.k !== "own") v.appendChild(b3BackfillNote());
+    cur.view(v);
+  }
+  function viewSandboxCompare(v, list) {   // one line per strategy: how each is doing
+    var since = function (rows) { var a = rows.map(function (x) { return x.at || ""; }).filter(Boolean).sort(); return a.length ? dateOnly(a[0]) : "–"; };
+    var line = function (name, where, rows, cur, wk, avgR, lots) {
+      var done = rows.filter(function (x) { return x.profit != null && x.status !== "Open"; }), net = sum(done.map(function (x) { return x.profit; }));
+      var w = done.filter(function (x) { return wk && (x.at || "") >= wk; });
+      var money = function (x) { return (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
+      var mc = function (x, n) { return n ? el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: money(x) }) : "–"; };
+      var open = rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Pending"; }).length;
+      return [name, where, lots, since(rows), done.length, pct(done.filter(function (x) { return x.profit > 0; }).length, done.length),
+        avgR == null ? "–" : signed(avgR, 2) + "R", mc(net, done.length), mc(sum(w.map(function (x) { return x.profit; })), w.length), open];
+    };
+    var rows = [];
+    list.forEach(function (x) {
+      if (x.k === "best3") { var b = DATA.best3;
+        rows.push(line("Best of 3 WoW", b.paper ? "Paper" : (b.server || "MT5 demo") + " " + (b.account || ""), b.trades || [], b.currency || "USD", b.week,
+          b.summary && b.summary.avg_r != null ? b.summary.avg_r : null, b.lots + " per position")); }
+      if (x.k === "bandit") { var k = DATA.bandit;
+        rows.push(line("Channel bandit", "Paper", k.trades || [], "USD", k.week, k.summary && k.summary.avg_r != null ? k.summary.avg_r : null, k.lots + " per position")); }
+      if (x.k === "own") { var o = ownRows(), lr = ownLegs(), os2 = DATA.own_sandbox;
+        rows.push(line("Own signals", os2 ? (os2.server || "Sandbox demo") + " " + (os2.account || "") : "Pepperstone demo", o.map(function (r) { return Object.assign({}, r, { status: r.status === "Pending" ? "Waiting" : r.status }); }),
+          (os2 && os2.currency) || (o[0] && o[0].currency) || "USD", DATA.best3 && DATA.best3.week, lr.length ? sum(lr.map(function (l) { return l.r_multiple; })) / lr.length : null,
+          os2 ? (os2.lots_now + " now (" + os2.lots_rule + ")") : "demo auto-trader")); }
+    });
+    v.appendChild(block("How each strategy is doing", "Closed positions since each started. Net is in each account’s money at its own lot size, so compare win rate and average R more than net. Choose a strategy above for its full page.",
+      table(["Strategy", "Where", "Lots", "Since", "Closed", "Win rate", "Avg R", "Net", "This week", "Open or waiting"], rows, { num: [4, 5, 6, 7, 8, 9] })));
+  }
+  function viewOwn(v) {   // own signals: the tracker's own setups, on trial on the Sandbox demo
+    var os2 = DATA.own_sandbox, rows = ownRows().slice().sort(function (a, b) { return (a.at || "") < (b.at || "") ? 1 : -1; });
+    var cur = (os2 && os2.currency) || (rows[0] && rows[0].currency) || "USD";
+    var done = rows.filter(function (x) { return x.profit != null && x.exit_time; }), net = sum(done.map(function (x) { return x.profit; }));
+    var lr = ownLegs(), lw = lr.filter(function (l) { return l.r_multiple > 0; }).length;
+    var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
+    v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
+      "The tracker’s own setups (not from any channel). " + (os2 ? "Since 16 Nov they trade on the Sandbox demo (" + (os2.server || "") + ", account " + (os2.account || "") + "): " +
+        os2.lots_now + " lots now (" + os2.lots_rule + "), at most " + os2.max_open + " open, their own daily loss limit " + os2.day_limit + "%. Earlier orders were on the Pepperstone demo. "
+        : "Their orders are on the demo MT5" + (rows.length ? "" : " (not published on the website; the tracker’s own scoring is below)") + ". ") +
+      "Never copied to a live account. MT5 results are the broker’s; “scored” is the tracker’s own scoring of the same signals (channel “Own signals”)." }));
+    v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["MT5 orders placed", rows.filter(function (x) { return x.ticket; }).length], ["MT5 closed", done.length],
+      ["MT5 win rate", pct(done.filter(function (x) { return x.profit > 0; }).length, done.length)], ["MT5 net", done.length ? money(net) : "–"],
+      ["Scored positions", lr.length], ["Scored win rate", pct(lw, lr.length)], ["Avg R (scored)", lr.length ? signed(sum(lr.map(function (l) { return l.r_multiple; })) / lr.length, 2) + "R" : "–"]].map(function (k) {
+      return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "MT5 net" ? cls(net) : "", text: String(k[1]) })]); })));
+    ownStatus(v);
+    v.appendChild(block("Own signal orders in MT5", "Newest first." + (os2 ? " Sandbox demo first, then the earlier Pepperstone demo orders (when shown)." : ""), rows.length ? table(
+      ["Date", "Time", "Side", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP", "Fill price", "Exit price", "Exit time", "Note"],
+      rows.slice(0, 120).map(function (x) {
+        return [dateOnly(x.at), timeOnly(x.at), x.side ? sideCell(x) : "", x.status === "Skipped" ? "Not taken" : (x.status || ""),
+          x.profit == null ? "" : el("span", { cls: x.profit > 0 ? "win" : x.profit < 0 ? "loss" : "", text: money(x.profit) }),
+          (x.kind || "").replace(/^Own /, ""), x.volume == null ? "" : x.volume, x.entry, x.sl, x.tp, x.fill_price, x.exit_price, x.exit_time ? when(x.exit_time) : "", x.note || ""];
+      }), { num: [4, 6, 7, 8, 9, 10, 11], wrap: [13] }) : empty("No own-signal MT5 orders to show yet.")));
+    var lc = lr.slice().sort(function (a, b) { return (a.exit_at || "") < (b.exit_at || "") ? 1 : -1; }).slice(0, 60);
+    v.appendChild(block("Scored own signals (closed)", "The tracker’s scoring, newest first.", lc.length ? table(["Posted", "Side", "Entry", "Exit", "Outcome", "R"],
+      lc.map(function (l) { return [when(l.posted_at), sideCell(l), l.fill_price, l.exit_price, l.outcome || "", rCell(l.r_multiple)]; }), { num: [2, 3, 5] })
+      : empty("No closed own signals yet.")));
+  }
+  function viewBest3One(v) {   // Best of 3 WoW: last week's three best channels, copied this week (its own MT5 account)
+    var b = DATA.best3;
     if (!b) { v.appendChild(empty("Best of 3 WoW isn’t running.")); return; }
     var cur = b.currency || "", rows = b.trades || [], caps = b.caps || [3, 2, 1];
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
@@ -958,8 +1031,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
     var openN = at.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length;
     v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
-      (lt.label ? lt.label + ": your" : "Your") + " live account (" + (lt.server || "") + ", account " + (lt.account || "") + "). It copies the demo’s " + (lt.orders || []).join(" and ") +
-      " orders (never own signals) with its own size and limits: " + (lt.lots_rule || (lt.lots_per_1000 + " lots per $1,000 of balance, at least " + lt.min_lots)) +
+      (lt.mirror ? "Demo mirror: the Pepperstone demo (" + (lt.server || "") + ", account " + (lt.account || "") + ") runs exactly what the live accounts run, so its results show what they should be doing at demo prices. It places the " + (lt.orders || []).join(" and ") +
+        " orders the live accounts copy (own signals now trade on the Sandbox demo), with its own size and limits: "
+      : (lt.label ? lt.label + ": your" : "Your") + " live account (" + (lt.server || "") + ", account " + (lt.account || "") + "). It copies the demo’s " + (lt.orders || []).join(" and ") +
+      " orders (never own signals) with its own size and limits: ") + (lt.lots_rule || (lt.lots_per_1000 + " lots per $1,000 of balance, at least " + lt.min_lots)) +
       " (" + lt.lots_now + " lots now), at most " + lt.max_open + " open or pending" +
       (lt.best3 ? ". Best of 3 also trades this account: " + lt.best3.lots_now + " lots per position now, at most " + lt.best3.max_open +
         " open, stops at most $" + lt.best3.max_sl + " away (this week: " + ((lt.best3.ranking || []).join(", ") || "no channel") + "); its orders are in the second table below" : "") +
@@ -969,7 +1044,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       ["Orders placed", placed.length], ["Closed", done.length], ["Win rate", pct(wins, done.length)], ["Net profit", done.length ? money(net) : "–"],
       ["Open or pending", openN], ["Not taken", at.filter(function (x) { return x.status === "Skipped" || x.status === "Failed"; }).length]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "Net profit" ? cls(net) : "", text: String(k[1]) })]); })));
-    v.appendChild(block("Live orders", "Newest first. “Not taken”: the demo placed it but the live account’s own limits skipped it (the note says why).", at.length ? table(
+    v.appendChild(block(lt.mirror ? "Consensus and ladder orders" : "Live orders", lt.mirror ? "Newest first. The orders the live accounts copy; “Not taken”: the demo’s own limits skipped it (the note says why)." : "Newest first. “Not taken”: the demo placed it but the live account’s own limits skipped it (the note says why).", at.length ? table(
       ["Date", "Time", "Side", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP", "Fill price", "Fill time", "Exit price", "Exit time", "Note"],
       at.map(function (x) {
         return [dateOnly(x.at), timeOnly(x.at), x.side ? sideCell(x) : "", x.status === "Skipped" ? "Not taken" : (x.status || ""),
@@ -1177,7 +1252,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     lts.forEach(function (a) { lOpen += (a.trades || []).filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length; });
     VIEWS.forEach(function (x) {
       if (x[0] === "account" && !lt) return;   // only when the live trader runs
-      if (x[0] === "best3" && !DATA.best3 && !DATA.bandit) return;   // only when Best of 3 WoW runs
+      if (x[0] === "best3" && !sandboxList().length) return;   // only when a strategy is on trial
       var b = el("button", { "aria-current": state.v === x[0] ? "page" : null, on: { click: function () { go({ v: x[0], c: x[0] === "channels" ? state.c : "" }); } } },
         [x[1], x[0] === "live" && live ? el("span", { cls: "count", text: String(live) }) : null,
          x[0] === "consensus" && cLive ? el("span", { cls: "count", text: String(cLive) }) : null,
