@@ -843,6 +843,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (b) out.push({ k: "best3", label: "Best of 3 WoW" + (b.paper ? " (paper)" : " (" + (b.server || "MT5 demo") + ")"), view: viewBest3One });
     if (DATA.best10) out.push({ k: "best10", label: "Best of 10, TP1 only (" + (DATA.best10.server || "MT5 demo") + ")", view: viewBest10 });
     if (DATA.pos2w) out.push({ k: "pos2w", label: "Positive 2 weeks, TP1 only (" + (DATA.pos2w.server || "MT5 demo") + ")", view: viewPos2w });
+    if (DATA.pos2w5) out.push({ k: "pos2w5", label: "Positive 2 weeks, max 5, TP1 only (" + (DATA.pos2w5.server || "MT5 demo") + ")", view: function (v) { viewBest3One(v, DATA.pos2w5, "pos2w"); } });
     if (DATA.bandit) out.push({ k: "bandit", label: "Channel bandit (paper, self-improving)", view: viewBandit });
     if (DATA.own_sandbox || DATA.own_status || ownRows().length || ownLegs().length)
       out.push({ k: "own", label: "Own signals" + (DATA.own_sandbox ? " (" + (DATA.own_sandbox.server || "Sandbox demo") + ")" : ""), view: viewOwn });
@@ -860,7 +861,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       [el("label", { "for": "sb-strategy", cls: "note", text: "Strategy" }), sel]));
     if (!list.length) { v.appendChild(empty("No strategy is on trial right now.")); return; }
     if (!cur) { viewSandboxCompare(v, list); return; }
-    if (cur.k !== "own" && cur.k !== "best10" && cur.k !== "pos2w") v.appendChild(b3BackfillNote());
+    if (cur.k !== "own" && cur.k !== "best10" && cur.k !== "pos2w" && cur.k !== "pos2w5") v.appendChild(b3BackfillNote());
     cur.view(v);
   }
   function viewSandboxCompare(v, list) {   // one line per strategy: how each is doing
@@ -881,6 +882,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
           b.summary && b.summary.avg_r != null ? b.summary.avg_r : null, b.lots + " per position")); }
       if (x.k === "best10") { var t10 = DATA.best10;
         rows.push(line("Best of 10, TP1 only", (t10.server || "MT5 demo") + " " + (t10.account || ""), t10.trades || [], t10.currency || "USD", t10.week, null, t10.lots + " per position")); }
+      if (x.k === "pos2w5") { var p5 = DATA.pos2w5;
+        rows.push(line("Positive 2 weeks, max 5", (p5.server || "MT5 demo") + " " + (p5.account || ""), p5.trades || [], p5.currency || "USD", p5.week, null, p5.lots + " per position")); }
       if (x.k === "pos2w") { var p2 = DATA.pos2w;
         rows.push(line("Positive 2 weeks, TP1 only", (p2.server || "MT5 demo") + " " + (p2.account || ""), p2.trades || [], p2.currency || "USD", p2.week, null, p2.lots + " per position")); }
       if (x.k === "bandit") { var k = DATA.bandit;
