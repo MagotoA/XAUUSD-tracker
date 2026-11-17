@@ -156,7 +156,7 @@ tbody tr.click { cursor: pointer; } tbody tr.click:hover td { background: var(--
 td.wrap { white-space: normal; min-width: 220px; }
 td.flag { color: var(--loss); font-size: 13px; }
 .buy { color: var(--win); font-weight: 600; } .sell { color: var(--loss); font-weight: 600; }
-.win { color: var(--win); } .loss { color: var(--loss); }
+.win { color: var(--win); } .loss { color: var(--loss); } .muted { color: var(--muted, #888); font-style: italic; }
 
 /* Filters */
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
@@ -281,6 +281,22 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function signed(x, d) { return x == null || isNaN(x) ? "–" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(d == null ? 1 : d); }
   function pct(a, b) { return b ? Math.round(a / b * 100) + "%" : "–"; }
   function sum(a) { return a.reduce(function (s, x) { return s + (x || 0); }, 0); }
+  // Best of 3's mid-week pause (since 17 Nov 2026): a paused channel's signals aren't copied but are tracked as if they
+  // were trading (rows with status "Paused", the as-if result in "would", never counted in the results)
+  function pauseNotes(log, week) {   // {channel: "paused 17 Nov 21:15 (48% of 25); back ..."} for the week (its Monday)
+    var out = {};
+    (log || []).forEach(function (e) {
+      if (week && e.week !== week) return;
+      var t = (e.event === "back" ? "back " : "paused ") + when(e.at) + (e.win == null ? "" : " (" + Math.round(e.win * 100) + "% of " + e.n + ")");
+      out[e.grp] = out[e.grp] ? out[e.grp] + "; " + t : t;
+    });
+    return out;
+  }
+  function pausedSummary(rows, money) {   // "6 positions tracked, closed ones would have made +12.40 USD"
+    var p = rows.filter(function (x) { return x.status === "Paused"; }), c = p.filter(function (x) { return x.would != null; });
+    if (!p.length) return "";
+    return p.length + " paused position" + (p.length > 1 ? "s" : "") + " tracked as if trading" + (c.length ? ", the " + c.length + " closed would have made " + money(sum(c.map(function (x) { return x.would; }))) : "") + " (not counted)";
+  }
   function median(a) { if (!a.length) return null; var b = a.slice().sort(function (x, y) { return x - y; }); var m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
   function byExit(a, b) { return (a.exit_at || "") < (b.exit_at || "") ? -1 : (a.exit_at || "") > (b.exit_at || "") ? 1 : 0; }
   function cls(x) { return x > 0 ? "pos" : x < 0 ? "neg" : ""; }
@@ -987,12 +1003,15 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         .concat([c ? el("span", { cls: c.r > 0 ? "win" : c.r < 0 ? "loss" : "", text: signed(c.r, 1) + "R" }) : "–", c ? pct(c.w, c.n) : "–",
           c ? Object.keys(c.ids).length : 0, o.length ? mcell(sumP(o)) : "–", o.length]);
     });
+    var pnote = pauseNotes(b.pause_log, b.week);
+    rk.forEach(function (row, i) { row.push(pnote[(b.ranking || [])[i].grp] || ""); });
     var head = ["#", "Channel", "Copies", "Last wk R", "Last wk win", "Last wk sig."].concat(byScore ? ["Score"] : [])
-      .concat(["This wk R", "This wk win", "This wk sig.", "Our net", "Our trades"]);
+      .concat(["This wk R", "This wk win", "This wk sig.", "Our net", "Our trades", "Note"]);
     var off = byScore ? 1 : 0;
     v.appendChild(block("This week’s channels", "Week of " + (b.week || "–") + (b.reranked ? ", re-checked at Monday close on last week + Monday." : ", " + (ten === "pos2w" ? "every channel positive on TP1 over the last 14 days (Last week columns: those 14 days)." : "ranked by last week’s results" + (ten ? " on TP1." : "."))) +
-      " “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi" + (ten ? " (TP1 only)" : " (all its TPs, as the ranking counts them)") + (byScore ? "; Score = last week’s R × win rate (the ranking)" : "") + "; “Our” = this strategy’s own closed positions from that channel this week.",
-      rk.length ? table(head, rk, { num: [3, 4, 5].concat(byScore ? [6] : []).concat([6 + off, 7 + off, 8 + off, 9 + off, 10 + off]) })
+      " “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi" + (ten ? " (TP1 only)" : " (all its TPs, as the ranking counts them)") + (byScore ? "; Score = last week’s R × win rate (the ranking)" : "") + "; “Our” = this strategy’s own closed positions from that channel this week." +
+      (b.pause ? " Mid-week check: a channel under " + Math.round(b.pause.below * 100) + "% wins this week after " + b.pause.after + "+ closed " + (b.pause.on === "tp1" ? "TP1 " : "") + "positions is paused (not copied, tracked as if trading) until it is back at " + Math.round(b.pause.back * 100) + "%; the Note says when." : ""),
+      rk.length ? table(head, rk, { num: [3, 4, 5].concat(byScore ? [6] : []).concat([6 + off, 7 + off, 8 + off, 9 + off, 10 + off]), wrap: [11 + off] })
       : empty("No channel qualified last week (3+ signals and a positive net R).")));
     var act = rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Closing"; });
     v.appendChild(block("Open and waiting", "", act.length ? table(["Date", "Time", "Channel", "Side", "TP", "Order", "Entry", "SL", "TP price", "Status"],
@@ -1009,6 +1028,12 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       return [h.week, ((h.channels || []).join(", ") || "–") + mon, c.length, pct(c.filter(function (x) { return x.profit > 0; }).length, c.length), c.length ? mcell(sumP(c)) : "–"];
     });
     v.appendChild(block("Week by week", "", hist.length ? table(["Week of", "Channels", "Closed", "Win rate", "Net"], hist, { num: [2, 3, 4] }) : empty("No weeks yet.")));
+    var pr = rows.filter(function (x) { return x.status === "Paused"; }).slice(0, 60);
+    if (pr.length) v.appendChild(block("Paused channels: tracked, not traded", "Signals of a channel paused by the mid-week check, followed as if they were copied (the tracker’s scoring, " +
+      (b.lots || "") + " lots per position), never counted in the results above. " + pausedSummary(rows, money) + ".",
+      table(["Date", "Time", "Channel", "Side", "TP", "Entry", "Exit", "As if", "Would have", "Note"],
+        pr.map(function (x) { return [dateOnly(x.at), timeOnly(x.at), who(x), sideCell(x), x.tp_no ? "TP" + x.tp_no : "", x.entry, x.exit, x.as_if || "", mcell(x.would), x.note || ""]; }),
+        { num: [5, 6, 8], wrap: [9] })));
     var nc = rows.filter(function (x) { return x.status === "Not copied"; }).slice(0, 40);
     if (nc.length) v.appendChild(block("Signals not copied", "", table(["Date", "Time", "Channel", "Side", "Why"],
       nc.map(function (x) { return [dateOnly(x.at), timeOnly(x.at), who(x), sideCell(x), x.note || ""]; }), { wrap: [4] })));
@@ -1101,7 +1126,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var b3all = lt.best3.trades || [];
       strat.push({ name: "Best of 3", rows: b3all, done: b3all.filter(function (x) { return x.profit != null; }), t: function (x) { return x.at || ""; },
         open: b3all.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Closing"; }).length,
-        skipped: b3all.filter(function (x) { return x.status === "Not copied"; }).length });
+        skipped: b3all.filter(function (x) { return x.status === "Not copied"; }).length +
+          Object.keys(b3all.filter(function (x) { return x.status === "Paused"; }).reduce(function (o, x) { o[x.at + x.grp] = 1; return o; }, {})).length });
     }
     var tot = { done: [], open: 0, skipped: 0 };
     strat.forEach(function (st) {
@@ -1141,14 +1167,20 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (lt.best3) {   // Best of 3 also trades this live account: its own orders, one row per TP
       var b3r = lt.best3.trades || [], b3d = b3r.filter(function (x) { return x.profit != null; });
       var b3net = sum(b3d.map(function (x) { return x.profit; }));
+      var pn = pauseNotes(lt.best3.pause_log, lt.best3.week), pnk = Object.keys(pn), ps = pausedSummary(b3r, money);
       v.appendChild(block("Best of 3 orders on this account", "Newest first, one row per TP. This week’s channels: " + ((lt.best3.ranking || []).join(", ") || "none") +
+        (pnk.length ? " (" + pnk.map(function (g) { return g + ": " + pn[g]; }).join("; ") + ")" : "") +
         ". Closed: " + b3d.length + ", win rate " + pct(b3d.filter(function (x) { return x.profit > 0; }).length, b3d.length) + ", net " + (b3d.length ? money(b3net) : "–") +
-        ". Running profit of open positions shows in MT5.", b3r.length ? table(
+        ". Running profit of open positions shows in MT5." + (ps ? " Paused: a channel under its win-rate floor this week isn’t copied; its signals are tracked here as if they were trading (status Paused, the would-be result in brackets): " + ps + "." : ""),
+        b3r.length ? table(
         ["Date", "Time", "Channel", "Side", "TP", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP price", "Exit", "Note"],
         b3r.map(function (x) {
-          return [dateOnly(x.at), timeOnly(x.at), "#" + x.rank + " " + x.grp, x.side ? sideCell(x) : "", x.tp_no ? "TP" + x.tp_no : "", x.status || "",
-            x.profit == null ? "" : el("span", { cls: x.profit > 0 ? "win" : x.profit < 0 ? "loss" : "", text: money(x.profit) }),
-            x.kind || "", x.lots == null ? "" : x.lots, x.entry, x.sl, x.tp, x.exit, x.note || ""];
+          var paused = x.status === "Paused";
+          return [dateOnly(x.at), timeOnly(x.at), "#" + x.rank + " " + x.grp, x.side ? sideCell(x) : "", x.tp_no ? "TP" + x.tp_no : "",
+            paused ? "Paused" + (x.as_if ? " · " + x.as_if : "") : (x.status || ""),
+            paused ? (x.would == null ? "" : el("span", { cls: "muted", text: "(" + money(x.would) + ")" }))
+              : x.profit == null ? "" : el("span", { cls: x.profit > 0 ? "win" : x.profit < 0 ? "loss" : "", text: money(x.profit) }),
+            paused ? "not traded" : (x.kind || ""), x.lots == null ? "" : x.lots, x.entry, x.sl, x.tp, x.exit, x.note || ""];
         }), { num: [6, 8, 9, 10, 11, 12], wrap: [13] }) : empty("No Best of 3 orders on this account yet.")));
     }
   }
