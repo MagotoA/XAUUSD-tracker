@@ -1248,10 +1248,98 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function liveAccounts() {   // [live], [live2] ... (live_trader.py --account N); older exports have only livetrades
     return DATA.liveaccounts && DATA.liveaccounts.length ? DATA.liveaccounts : (DATA.livetrades ? [DATA.livetrades] : []);
   }
+  // ---------- strategies on a live account (since 18 Nov 2026): every strategy that ever traded it stays listed, on or off ----------
+  function acctStrats(lt) {
+    var sg = stratFilter(), out = [], on = lt.orders || [];
+    var lastOf = function (rows) { return rows.map(function (x) { return x.at || ""; }).filter(Boolean).sort().pop() || ""; };
+    [["consensus", "Consensus"], ["ladder", "Ladder"], ["own", "Own signals"]].forEach(function (k) {
+      var all = (lt.trades || []).filter(function (x) { return orderKind(x) === k[0]; });
+      if (!all.length && on.indexOf(k[0]) < 0) return;
+      var rows = all.filter(liveOrderOK);
+      out.push({ key: k[0], name: k[1], on: on.indexOf(k[0]) >= 0, rows: rows, last: lastOf(all),
+        done: rows.filter(function (x) { return x.profit != null && x.exit_time; }),
+        open: rows.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length,
+        skipped: rows.filter(function (x) { return x.status === "Skipped" || x.status === "Failed"; }).length });
+    });
+    if (lt.best3) {   // on, or switched off with its past orders kept (best3.off)
+      var all = lt.best3.trades || [], rows = all.filter(function (x) { return orderOK(x, "best3", x.grp); });
+      out.push({ key: "best3", name: "Best of 3", on: !lt.best3.off, rows: rows, last: lt.best3.last || lastOf(all),
+        done: rows.filter(function (x) { return x.profit != null; }),
+        open: rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Closing"; }).length,
+        skipped: rows.filter(function (x) { return x.status === "Not copied"; }).length +
+          Object.keys(rows.filter(function (x) { return x.status === "Paused"; }).reduce(function (o, x) { o[x.at + x.grp] = 1; return o; }, {})).length });
+    }
+    return out.filter(function (st) { return !sg || st.key === sg; });
+  }
+  function stratTotals(list, name) {   // closed, net, wins, this week and today (by the time the order was placed), for one line or the total
+    var now = Date.now(), d0 = nbMidnight(now), w0 = weekStartMs(now), p = function (x) { return x.profit; };
+    var t = { name: name, key: list.length === 1 ? list[0].key : (list[0] && list.every(function (x) { return x.key === list[0].key; }) ? list[0].key : ""),
+              done: [], rows: [], open: 0, skipped: 0, on: false, last: "" };
+    list.forEach(function (st) {
+      t.done = t.done.concat(st.done); t.rows = t.rows.concat(st.rows); t.open += st.open; t.skipped += st.skipped;
+      t.on = t.on || st.on; if ((st.last || "") > t.last) t.last = st.last;
+    });
+    t.net = sum(t.done.map(p)); t.wins = t.done.filter(function (x) { return x.profit > 0; }).length;
+    t.week = t.done.filter(function (x) { return tOf(x, "at") >= w0; }); t.today = t.done.filter(function (x) { return tOf(x, "at") >= d0; });
+    t.weekNet = sum(t.week.map(p)); t.todayNet = sum(t.today.map(p));
+    t.first = t.rows.map(function (x) { return x.at || ""; }).filter(Boolean).sort()[0] || "";
+    return t;
+  }
+  function stratTable(lines, total, money, per) {   // the total first, then one line per strategy
+    var mc = function (x, n) { return n ? el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: money(x) }) : "–"; };
+    var line = function (t, top) {
+      return [top ? el("strong", { text: t.name }) : t.name,
+        top ? "" : t.on ? "On" : el("span", { cls: "muted", text: "Off" + (t.last ? ", last order " + dateOnly(t.last) : "") }),
+        t.first ? dateOnly(t.first) : "–", t.done.length, pct(t.wins, t.done.length), mc(t.net, t.done.length),
+        t.done.length ? money(t.net / t.done.length) : "–"]
+        .concat(per ? [] : [mc(t.weekNet, t.week.length), mc(t.todayNet, t.today.length)], [t.open, t.skipped]);
+    };
+    return table(["Strategy", "Status", "Since", "Closed", "Win rate", "Net", "Avg per trade"].concat(per ? [] : ["This week", "Today"], ["Open or waiting", "Not taken"]),
+      [line(total, true)].concat(lines.map(function (t) { return line(t); })), { num: per ? [3, 4, 5, 6, 7, 8] : [3, 4, 5, 6, 7, 8, 9, 10] });
+  }
+  function totalBoxes(t, balance, money, per, sg) {
+    var boxes = [["Balance", balance == null ? "–" : balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + (money.cur || ""), ""],
+      [(sg ? "Net" : "Net, all strategies") + (fx().any || sg ? " (filtered)" : ""), t.done.length ? money(t.net) : "–", cls(t.net)]];
+    if (!per) boxes.push(["Today", money(t.todayNet), cls(t.todayNet)], ["This week", money(t.weekNet), cls(t.weekNet)]);
+    boxes.push(["Closed positions", t.done.length, ""], ["Win rate", pct(t.wins, t.done.length), ""], ["Open or waiting", t.open, ""]);
+    return el("dl", { cls: "kpis", style: "margin-bottom:14px" }, boxes.map(function (k) {
+      return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[2], text: String(k[1]) })]); }));
+  }
+  var STRAT_NOTE = "Closed positions, broker results after costs (deposits and withdrawals not counted). Every strategy that has traded the account stays listed after it is switched off, with its results. Best of 3 counts one position per TP. ";
+  function viewAllAccounts(v, accts) {   // the live accounts together (the demo mirror left out)
+    var live = accts.filter(function (a) { return !a.mirror; }), per = fx().period, sg = stratFilter(), cur = (live[0] && live[0].currency) || "USD";
+    var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
+    money.cur = cur;
+    var per_acct = live.map(function (a) { var l = acctStrats(a); return { a: a, lines: l, tot: stratTotals(l, a.label || "Live") }; });
+    var keys = [], byKey = {};
+    per_acct.forEach(function (x) { x.lines.forEach(function (st) { if (!byKey[st.key]) { byKey[st.key] = []; keys.push(st.key); } byKey[st.key].push(st); }); });
+    var lines = keys.map(function (k) { return stratTotals(byKey[k], byKey[k][0].name); });
+    var total = stratTotals(lines, "All strategies, all live accounts");
+    v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text: "All live accounts together (" + live.map(function (a) { return a.label; }).join(", ") +
+      "; the demo mirror is left out). Money is added up in " + cur + "; each account trades its own lot size, so compare win rates more than money. Choose one account above for its orders." }));
+    v.appendChild(totalBoxes(total, sum(live.map(function (a) { return a.balance || 0; })), money, per, sg));
+    v.appendChild(block("By strategy, all live accounts", STRAT_NOTE + (per ? "" : "This week from Sunday 23:00 Nairobi, today from 00:00 Nairobi, by the time the order was placed. ") +
+      (fx().any || sg ? "Only orders that pass the filters above." : ""), stratTable(lines, total, money, per)));
+    var mc = function (x, n) { return n ? el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: money(x) }) : "–"; };
+    var names = keys.map(function (k) { return byKey[k][0].name; });
+    var acctLine = function (label, bal, t, ls, top) {
+      var byK = {}; ls.forEach(function (st) { byK[st.key] = st; });
+      return [top ? el("strong", { text: label }) : label, bal == null ? "–" : bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        t.done.length, pct(t.wins, t.done.length), mc(t.net, t.done.length)]
+        .concat(keys.map(function (k) { var st = byK[k]; if (!st) return "–"; var n = sum(st.done.map(function (x) { return x.profit; })); return mc(n, st.done.length); }))
+        .concat(per ? [] : [mc(t.weekNet, t.week.length), mc(t.todayNet, t.today.length)]);
+    };
+    var arows = [acctLine("All live accounts", sum(live.map(function (a) { return a.balance || 0; })), total, lines, true)].concat(per_acct.map(function (x) {
+      return acctLine(x.a.label || "Live", x.a.balance, x.tot, x.lines); }));
+    var n0 = 5 + keys.length;
+    v.appendChild(block("By account", "Net per strategy on each account, in " + cur + ".", table(["Account", "Balance", "Closed", "Win rate", "Net"].concat(names, per ? [] : ["This week", "Today"]), arows,
+      { num: [1, 2, 3, 4].concat(keys.map(function (k, i) { return 5 + i; }), per ? [] : [n0, n0 + 1]) })));
+  }
   function viewAccount(v) {   // the live MT5 accounts (live_trader.py): each one's own orders and the broker's results
     var accts = liveAccounts();
     if (!accts.length) { v.appendChild(empty("The live trader isn’t running.")); return; }
-    var ix = Math.min(Math.max(state.la || 0, 0), accts.length - 1), lt = accts[ix];
+    var nLive = accts.filter(function (a) { return !a.mirror; }).length, all = state.la === -1 && nLive > 1;
+    var ix = all ? -1 : Math.min(Math.max(state.la || 0, 0), accts.length - 1), lt = accts[ix];
     if (accts.length > 1) {
       var sel = el("select", { id: "live-account", "aria-label": "Live account", on: { change: function (e) { go({ la: parseInt(e.target.value, 10) || 0 }, true); } } },
         accts.map(function (a, i) {
@@ -1259,74 +1347,34 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
           return el("option", { value: String(i), text: (a.label || ("Live " + (i + 1))) + " · account " + (a.account || "?") +
             (a.balance != null ? " · " + a.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + (a.currency || "") : "") +
             (open ? " · " + open + " open" : "") });
-        }));
+        }).concat(nLive > 1 ? [el("option", { value: "-1", text: "All live accounts together" })] : []));
       sel.value = String(ix);
       v.appendChild(el("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px" },
         [el("label", { "for": "live-account", cls: "note", text: "Account" }), sel]));
     }
+    if (all) { viewAllAccounts(v, accts); return; }
     var at = (lt.trades || []).filter(liveOrderOK).sort(function (a, b) { return (a.at || "") < (b.at || "") ? 1 : -1; }), cur = lt.currency || "";
     var sg = stratFilter(), per = fx().period;
-    var placed = at.filter(function (x) { return x.ticket; }), done = at.filter(function (x) { return x.profit != null && x.exit_time; });
-    var net = sum(done.map(function (x) { return x.profit; })), wins = done.filter(function (x) { return x.profit > 0; }).length;
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
-    var openN = at.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length;
+    money.cur = cur;
+    var b3off = lt.best3 && lt.best3.off;
     v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
       (lt.mirror ? "Demo mirror: the Pepperstone demo (" + (lt.server || "") + ", account " + (lt.account || "") + ") runs exactly what the live accounts run, so its results show what they should be doing at demo prices. It places the " + (lt.orders || []).join(" and ") +
         " orders the live accounts copy (own signals now trade on the Sandbox demo), with its own size and limits: "
       : (lt.label ? lt.label + ": your" : "Your") + " live account (" + (lt.server || "") + ", account " + (lt.account || "") + "). It copies the demo’s " + (lt.orders || []).join(" and ") +
       " orders (never own signals) with its own size and limits: ") + (lt.lots_rule || (lt.lots_per_1000 + " lots per $1,000 of balance, at least " + lt.min_lots)) +
       " (" + lt.lots_now + " lots now), at most " + lt.max_open + " open or pending" +
-      (lt.best3 ? ". Best of 3 also trades this account: " + lt.best3.lots_now + " lots per position now, at most " + lt.best3.max_open +
+      (lt.best3 && !b3off ? ". Best of 3 also trades this account: " + lt.best3.lots_now + " lots per position now, at most " + lt.best3.max_open +
         " open, stops at most $" + lt.best3.max_sl + " away (this week: " + ((lt.best3.ranking || []).join(", ") || "no channel") + "); its orders are in the second table below" : "") +
+      (b3off ? ". Best of 3 is switched off here (last order " + dateOnly(lt.best3.last) + "); its past orders stay below and in the totals" : "") +
       ", daily loss limit " + lt.day_limit + "% for the whole account. Results are the broker’s, in " + cur +
       "; open trades’ running profit shows in MT5. Last change " + when(lt.updated) + "." }));
-    // every strategy on this account together (since 17 Nov 2026): consensus and ladder + Best of 3, then one line each
-    var nowMs = Date.now(), dayStart = new Date(Math.floor((nowMs + 3 * 3600e3) / 864e5) * 864e5 - 3 * 3600e3).toISOString();   // 00:00 Nairobi
-    var wk0 = new Date(nowMs + 4 * 3600e3); wk0.setUTCHours(0, 0, 0, 0); wk0.setUTCDate(wk0.getUTCDate() - ((wk0.getUTCDay() + 6) % 7));
-    var weekStart = new Date(wk0.getTime() - 4 * 3600e3).toISOString();                                                            // Sunday 23:00 Nairobi
-    // today and this week go by the time the order was placed, like the filters (since 18 Nov 2026; the consensus used its exit time before)
-    var cname = sg === "consensus" ? "Consensus" : sg === "ladder" ? "Ladder" : sg === "own" ? "Own signals" : "Consensus and ladder";
-    var strat = sg === "best3" ? [] : [{ name: cname + (lt.mirror ? " (demo)" : ""), rows: at, done: done, t: function (x) { return x.at || ""; },
-      open: openN, skipped: at.filter(function (x) { return x.status === "Skipped" || x.status === "Failed"; }).length }];
-    if (lt.best3 && (!sg || sg === "best3")) {
-      var b3all = (lt.best3.trades || []).filter(function (x) { return orderOK(x, "best3", x.grp); });
-      strat.push({ name: "Best of 3", rows: b3all, done: b3all.filter(function (x) { return x.profit != null; }), t: function (x) { return x.at || ""; },
-        open: b3all.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Closing"; }).length,
-        skipped: b3all.filter(function (x) { return x.status === "Not copied"; }).length +
-          Object.keys(b3all.filter(function (x) { return x.status === "Paused"; }).reduce(function (o, x) { o[x.at + x.grp] = 1; return o; }, {})).length });
-    }
-    var tot = { done: [], open: 0, skipped: 0 };
-    strat.forEach(function (st) {
-      st.net = sum(st.done.map(function (x) { return x.profit; }));
-      st.week = st.done.filter(function (x) { return st.t(x) >= weekStart; });
-      st.today = st.done.filter(function (x) { return st.t(x) >= dayStart; });
-      var first = st.rows.map(function (x) { return x.at || ""; }).filter(Boolean).sort()[0];
-      st.since = first ? dateOnly(first) : "–";
-      tot.done = tot.done.concat(st.done.map(function (x) { return { profit: x.profit, t: st.t(x) }; }));
-      tot.open += st.open; tot.skipped += st.skipped;
-    });
-    var tNet = sum(tot.done.map(function (x) { return x.profit; })), tWins = tot.done.filter(function (x) { return x.profit > 0; }).length;
-    var tWeek = sum(tot.done.filter(function (x) { return x.t >= weekStart; }).map(function (x) { return x.profit; }));
-    var tDay = sum(tot.done.filter(function (x) { return x.t >= dayStart; }).map(function (x) { return x.profit; }));
-    var mc = function (x, n) { return n ? el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: money(x) }) : "–"; };
-    var boxes = [["Balance", (lt.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur, ""],
-      [(sg ? "Net" : "Net, all strategies") + (fx().any || sg ? " (filtered)" : ""), tot.done.length ? money(tNet) : "–", cls(tNet)]];
-    if (!per) boxes.push(["Today", money(tDay), cls(tDay)], ["This week", money(tWeek), cls(tWeek)]);
-    boxes.push(["Closed positions", tot.done.length, ""], ["Win rate", pct(tWins, tot.done.length), ""], ["Open or waiting", tot.open, ""]);
-    v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, boxes.map(function (k) {
-      return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[2], text: String(k[1]) })]); })));
-    var wt = function (a, b) { return per ? [] : [a, b]; };   // this week and today: left out while a period is chosen above
-    var srows = strat.map(function (st) {
-      return [st.name, st.since, st.done.length, pct(st.done.filter(function (x) { return x.profit > 0; }).length, st.done.length), mc(st.net, st.done.length)]
-        .concat(wt(mc(sum(st.week.map(function (x) { return x.profit; })), st.week.length), mc(sum(st.today.map(function (x) { return x.profit; })), st.today.length)), [st.open, st.skipped]);
-    });
-    if (strat.length > 1) srows.push([el("strong", { text: "All strategies" }), strat.map(function (st) { return st.since; }).filter(function (x) { return x !== "–"; }).sort()[0] || "–",
-      tot.done.length, pct(tWins, tot.done.length), mc(tNet, tot.done.length)].concat(wt(mc(tWeek, 1), mc(tDay, 1)), [tot.open, tot.skipped]));
-    v.appendChild(block("By strategy", "Closed positions, broker results in " + cur + " after costs (deposits and withdrawals not counted). Best of 3 counts one position per TP. " +
+    var lines = acctStrats(lt).map(function (st) { return stratTotals([st], st.name); }), total = stratTotals(lines, "All strategies");
+    v.appendChild(totalBoxes(total, lt.balance || 0, money, per, sg));
+    v.appendChild(block("By strategy", STRAT_NOTE.replace("broker results", "broker results in " + cur) +
       (per ? "" : "This week and today go by the time the order was placed: this week from Sunday 23:00 Nairobi, today from 00:00 Nairobi. ") +
       (fx().any || sg ? "Only orders that pass the filters above." : ""),
-      strat.length ? table(["Strategy", "Since", "Closed", "Win rate", "Net"].concat(wt("This week", "Today"), ["Open or waiting", "Not taken"]), srows,
-        { num: per ? [2, 3, 4, 5, 6] : [2, 3, 4, 5, 6, 7, 8] }) : empty("No strategy on this account matches the filters above.")));
+      lines.length ? stratTable(lines, total, money, per) : empty("No strategy on this account matches the filters above.")));
     if (sg !== "best3") v.appendChild(block("Consensus and ladder orders", lt.mirror ? "Newest first. The orders the live accounts copy; “Not taken”: the demo’s own limits skipped it (the note says why)." : "Newest first. “Not taken”: the demo placed it but the live account’s own limits skipped it (the note says why).", at.length ? table(
       ["Date", "Time", "Side", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP", "Fill price", "Fill time", "Exit price", "Exit time", "Note"],
       at.map(function (x) {
@@ -1339,7 +1387,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var b3r = (lt.best3.trades || []).filter(function (x) { return orderOK(x, "best3", x.grp); }), b3d = b3r.filter(function (x) { return x.profit != null; });
       var b3net = sum(b3d.map(function (x) { return x.profit; }));
       var pn = pauseNotes(lt.best3.pause_log, lt.best3.week), pnk = Object.keys(pn), ps = pausedSummary(b3r, money);
-      v.appendChild(block("Best of 3 orders on this account", "Newest first, one row per TP. This week’s channels: " + ((lt.best3.ranking || []).join(", ") || "none") +
+      v.appendChild(block("Best of 3 orders on this account" + (b3off ? " (switched off)" : ""), "Newest first, one row per TP. " +
+        (b3off ? "Best of 3 is switched off on this account; these are its past orders. " : "This week’s channels: " + ((lt.best3.ranking || []).join(", ") || "none")) +
         (pnk.length ? " (" + pnk.map(function (g) { return g + ": " + pn[g]; }).join("; ") + ")" : "") +
         ". Closed: " + b3d.length + ", win rate " + pct(b3d.filter(function (x) { return x.profit > 0; }).length, b3d.length) + ", net " + (b3d.length ? money(b3net) : "–") +
         ". Running profit of open positions shows in MT5." + (ps ? " Paused: a channel under its win-rate floor this week isn’t copied; its signals are tracked here as if they were trading (status Paused, the would-be result in brackets): " + ps + "." : ""),
