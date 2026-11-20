@@ -1821,30 +1821,46 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["ladder", "R", "bool", "Ladder orders", "A second, half-size order $5 better than the consensus entry."],
     ["early_exit", "E", "bool", "Early exit", "Close at −$5 if price rushes against the trade within 2 minutes."],
     ["profit_lock", "P", "bool", "Profit lock", "Once +$4 in profit, the stop moves to +$2."],
-    ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close while in profit when a voting channel posts the other way."]];
+    ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close while in profit when a voting channel posts the other way."],
+    ["stop_usd", "S", "usd", "Consensus stop $", "Stop this many dollars from the entry (10 = 100 pips). Bigger = more lost at each stop. $1 – $50."],
+    ["news_min", "N", "int", "News filter (min)", "No new orders this many minutes either side of high-impact US news. 0 = off. 0 – 120."],
+    ["cooldown_min", "C", "int", "Pause after opposite consensus (min)", "No order this many minutes after a consensus the other way. 0 = off. 0 – 120."],
+    ["max_delay", "F", "int", "Order time limit (min)", "No order if the signal is older than this when it reaches the account. 1 – 10."]];
   var PCODE = { live: "1", live2: "2", live3: "3" };
+  function portalShow(key, x) {   // a setting's value in words (the defaults note)
+    if (x === true || x === false) return key === "trading" ? (x ? "on" : "paused") : (x ? "on" : "off");
+    if (key === "lots") return x === "auto" ? "auto" : x === "rule" ? "config.ini’s lot rule" : String(+x);
+    if (key === "stop_usd") return "$" + (+x);
+    if ((key === "week_limit" || key === "news_min" || key === "cooldown_min") && !+x) return "off";
+    if (key === "day_limit" || key === "week_limit") return (+x) + "%";
+    if (key === "news_min" || key === "cooldown_min" || key === "max_delay") return (+x) + " min";
+    return String(x);
+  }
   function portalPayload(sec, vals) {
     var parts = ["s" + PCODE[sec]];
     PFIELDS.forEach(function (f) {
       if (!(f[0] in vals)) return;
       var x = vals[f[0]];
-      parts.push(f[1] + (f[2] === "bool" ? (x ? "1" : "0") : f[0] === "lots" ? (x === "auto" ? "a" : String(+x).replace(".", "p")) : String(Math.round(+x))));
+      parts.push(f[1] + (f[2] === "bool" ? (x ? "1" : "0") : f[0] === "lots" ? (x === "auto" ? "a" : String(+x).replace(".", "p")) :
+        f[2] === "usd" ? String(Math.round(+x * 100) / 100).replace(".", "p") : String(Math.round(+x))));
     });
     return parts.join("_");
   }
   function viewSettings(v) {
     var accts = liveAccounts().filter(function (a) { return a.portal && PCODE[a.section]; }), bot = DATA.portal_bot;
     v.appendChild(el("p", { style: "margin:0 0 14px;max-width:80ch" }, [el("strong", { text: "Account settings: " }),
-      "each live account’s owner changes their own account here. Pick the account, tick the settings, then press “Apply in Telegram”: the tracker’s bot shows the changes and applies them only when the account’s owner (or the admin) taps Apply. The account uses them within a few seconds, no restart. Shared rules (which channels vote, channel rules, the Sandbox) stay with the admin."]));
+      "each live account’s owner changes their own account here. Pick the account, tick the settings, then press “Apply in Telegram”: the tracker’s bot shows the changes and applies them only when the account’s owner (or the admin) taps Apply. The account uses them within a few seconds, no restart. Shared rules (which channels vote and what makes a consensus, channel rules, the demo, the Sandbox) stay with the admin."]));
     if (!accts.length) { v.appendChild(empty("No live account reports its settings yet (the live traders show them after their next restart).")); return; }
     var sec = accts.some(function (a) { return a.section === state.ps; }) ? state.ps : accts[0].section;
     var a = accts.filter(function (x) { return x.section === sec; })[0], cur = a.portal.values || {}, maxL = a.portal.max_lots || 0.1;
-    var want = {}; PFIELDS.forEach(function (f) { want[f[0]] = cur[f[0]]; });
+    // a live trader started before a setting existed doesn't report it: that row is left out until its next restart
+    var FIELDS = PFIELDS.filter(function (f) { return f[0] in cur; });
+    var want = {}; FIELDS.forEach(function (f) { want[f[0]] = cur[f[0]]; });
     if (cur.lots_rule || want.lots == null) want.lots = cur.lots;
     var pick = el("select", { "aria-label": "Account", on: { change: function (e) { go({ ps: e.target.value }, true); } } },
       accts.map(function (x) { return el("option", { value: x.section, selected: x.section === sec ? "selected" : null, text: x.label + " (" + (x.server || "") + " " + (x.account || "") + ")" }); }));
     v.appendChild(el("div", { style: "margin-bottom:14px" }, [pick]));
-    var rows = PFIELDS.map(function (f) {
+    var rows = FIELDS.map(function (f) {
       var key = f[0], ctl;
       if (f[2] === "bool") {
         ctl = el("input", { type: "checkbox", on: { change: function (e) { want[key] = e.target.checked; update(); } } });
@@ -1857,18 +1873,19 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         auto.checked = isAuto;
         ctl = el("span", null, [el("label", null, [auto, " auto"]), " or ", num, el("span", { cls: "note", text: " lots (max " + maxL + ")" })]);
       } else {
-        ctl = el("input", { type: "number", step: "1", style: "width:6em", on: { input: function (e) { want[key] = e.target.value; update(); } } });
+        ctl = el("input", { type: "number", step: f[2] === "usd" ? "0.5" : "1", style: "width:6em", on: { input: function (e) { want[key] = e.target.value; update(); } } });
         ctl.value = want[key] == null ? "" : String(want[key]);
       }
-      var setHere = (a.portal.set_here || []).indexOf(key) >= 0;
-      return [el("strong", { text: f[3] }), ctl, el("span", { cls: "note", text: f[4] + (setHere ? " Set here (not config.ini)." : "") })];
+      var setHere = (a.portal.set_here || []).indexOf(key) >= 0, dft = (a.portal.defaults || {})[key];
+      return [el("strong", { text: f[3] }), ctl, el("span", { cls: "note", text: f[4] + (setHere ? " Set here (not config.ini)." : "") +
+        (dft != null && key !== "trading" ? " Default: " + portalShow(key, dft) + "." : "") })];
     });
     v.appendChild(block(a.label + ": settings", "Now in force on the account" + (a.updated ? " (reported " + when(a.updated) + ")" : "") + ". " +
       (a.portal.changed_by ? "Last changed by " + a.portal.changed_by + (a.portal.changed_at ? ", " + when(a.portal.changed_at) : "") + "." : "Not changed here yet: everything comes from config.ini."),
       table(["Setting", "Value", "What it does"], rows, { wrap: [2] })));
     var msg = el("p", { cls: "note", style: "margin:8px 0" }), btn = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply in Telegram"]);
     var changedKeys = function () {
-      return PFIELDS.filter(function (f) { var k = f[0];
+      return FIELDS.filter(function (f) { var k = f[0];
         if (f[2] === "bool") return !!want[k] !== !!cur[k];
         if (k === "lots") return String(want.lots) !== String(cur.lots) || cur.lots_rule && String(want.lots) !== String(cur.lots);
         return +want[k] !== +cur[k]; }).map(function (f) { return f[0]; });
@@ -1879,6 +1896,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (!(+want.day_limit >= 5 && +want.day_limit <= 50)) bad.push("Daily loss limit must be 5 – 50.");
       if (!(+want.week_limit >= 0 && +want.week_limit <= 80)) bad.push("Weekly loss limit must be 0 – 80.");
       if (!(+want.max_open >= 1 && +want.max_open <= 5)) bad.push("Max open trades must be 1 – 5.");
+      if (ch.indexOf("stop_usd") >= 0 && !(+want.stop_usd >= 1 && +want.stop_usd <= 50)) bad.push("Consensus stop must be $1 – $50.");
+      if (ch.indexOf("news_min") >= 0 && !(+want.news_min >= 0 && +want.news_min <= 120)) bad.push("News filter must be 0 – 120 min.");
+      if (ch.indexOf("cooldown_min") >= 0 && !(+want.cooldown_min >= 0 && +want.cooldown_min <= 120)) bad.push("Pause after opposite consensus must be 0 – 120 min.");
+      if (ch.indexOf("max_delay") >= 0 && !(+want.max_delay >= 1 && +want.max_delay <= 10)) bad.push("Order time limit must be 1 – 10 min.");
       btn.disabled = !ch.length || bad.length > 0 || !bot;
       msg.textContent = bad.length ? bad.join(" ") : !ch.length ? "Change a setting above to apply it." :
         !bot ? "The tracker’s bot isn’t running, so changes can’t be sent yet." :
@@ -1888,8 +1909,18 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var vals = {}; changedKeys().forEach(function (k) { vals[k] = want[k]; });
       window.open("https://t.me/" + bot + "?start=" + portalPayload(sec, vals), "_blank");
     });
-    v.appendChild(el("div", { cls: "panel" }, [btn, msg,
-      el("p", { cls: "note", text: "First time? Send /start to " + (bot ? "@" + bot : "the tracker’s bot") + " in Telegram; the admin links you to your account. In Telegram you can also use /settings, /pause and /resume." })]));
+    // "Reset to defaults" (21 Nov): everything set here goes back to config.ini; trading on/pause is kept
+    var resettable = (a.portal.set_here || []).filter(function (k) { return k !== "trading"; });
+    var rbtn = el("button", { type: "button", cls: "link", style: "font-size:16px;margin-left:24px" }, ["Reset to defaults"]);
+    rbtn.disabled = !resettable.length || !bot;
+    rbtn.title = resettable.length ? "Back to config.ini for: " + resettable.map(function (k) { var f = PFIELDS.filter(function (x) { return x[0] === k; })[0]; return f ? f[3] : k; }).join(", ")
+      : "Nothing is set here: the account already uses the default settings.";
+    rbtn.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=s" + PCODE[sec] + "_X", "_blank"); });
+    var rnote = el("p", { cls: "note", style: "margin:4px 0 8px" }, [resettable.length
+      ? "Reset to defaults: every setting changed here goes back to config.ini (" + resettable.length + " now). Trading on/pause stays as it is. Confirm in Telegram."
+      : "Reset to defaults: nothing to reset, the account already uses the default settings."]);
+    v.appendChild(el("div", { cls: "panel" }, [btn, rbtn, msg, rnote,
+      el("p", { cls: "note", text: "First time? Send /start to " + (bot ? "@" + bot : "the tracker’s bot") + " in Telegram; the admin links you to your account. In Telegram you can also use /settings, /pause, /resume and /reset." })]));
     update();
   }
 
