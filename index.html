@@ -155,6 +155,10 @@ tr:last-child td { border-bottom: 0; }
 tbody tr.click { cursor: pointer; } tbody tr.click:hover td { background: var(--chip); }
 td.wrap { white-space: normal; min-width: 220px; }
 td.flag { color: var(--loss); font-size: 13px; }
+/* Settings tab: a heading row per group */
+.psettings tr.pgroup th { background: var(--chip); color: var(--ink); font-size: 14px; font-weight: 700; padding-top: 12px; }
+.psettings tr.pgroup th .pnote { font-weight: 400; color: var(--muted); font-size: 13px; }
+.psettings td:first-child { padding-left: 22px; }
 .buy { color: var(--win); font-weight: 600; } .sell { color: var(--loss); font-weight: 600; }
 .win { color: var(--win); } .loss { color: var(--loss); } .muted { color: var(--muted, #888); font-style: italic; }
 
@@ -1821,18 +1825,27 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["ladder", "R", "bool", "Ladder orders", "A second, half-size order $5 better than the consensus entry."],
     ["early_exit", "E", "bool", "Early exit", "Close at −$5 if price rushes against the trade within 2 minutes."],
     ["profit_lock", "P", "bool", "Profit lock", "Once +$4 in profit, the stop moves to +$2."],
-    ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close while in profit when a voting channel posts the other way."],
+    ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close the consensus trade (and its ladder) while in profit when a voting channel posts the other way."],
     ["stop_usd", "S", "usd", "Consensus stop $", "Stop this many dollars from the entry (10 = 100 pips). Bigger = more lost at each stop. $1 – $50."],
     ["news_min", "N", "int", "News filter (min)", "No new orders this many minutes either side of high-impact US news. 0 = off. 0 – 120."],
     ["cooldown_min", "C", "int", "Pause after opposite consensus (min)", "No order this many minutes after a consensus the other way. 0 = off. 0 – 120."],
-    ["max_delay", "F", "int", "Order time limit (min)", "No order if the signal is older than this when it reaches the account. 1 – 10."]];
+    ["max_delay", "F", "int", "Order time limit (min)", "No order if the signal is older than this when it reaches the account. 1 – 10."],
+    ["ladder_stop", "K", "usd", "Ladder stop $", "Stop this many dollars from the ladder’s entry. Bigger = more lost at each stop. $1 – $50."],
+    ["max_risk", "Z", "int", "Max risk per order %", "No single order can lose more than this share of the balance at its stop: a bigger one is cut down to the largest size that fits. Can be lowered here, not raised above the admin’s cap."]];
+  // the Settings tab shows them in these groups (portal.py GROUPS, the same order in Telegram's /settings)
+  var PGROUPS = [["Account", "on/off, size and how many orders at once", ["trading", "lots", "max_open"]],
+    ["Loss limits", "how much one order, a day or a week can lose", ["max_risk", "day_limit", "week_limit"]],
+    ["When new orders are allowed", "checked before every consensus and ladder order", ["news_min", "cooldown_min", "max_delay"]],
+    ["Consensus trade", "the main order: its stop and how it can close early", ["stop_usd", "early_exit", "profit_lock", "opposite_exit"]],
+    ["Ladder order", "the second, half-size order $5 better than the consensus entry", ["ladder", "ladder_stop"]]];
   var PCODE = { live: "1", live2: "2", live3: "3" };
   function portalShow(key, x) {   // a setting's value in words (the defaults note)
+    if (x && x.text) return x.text;
     if (x === true || x === false) return key === "trading" ? (x ? "on" : "paused") : (x ? "on" : "off");
     if (key === "lots") return x === "auto" ? "auto" : x === "rule" ? "config.ini’s lot rule" : String(+x);
-    if (key === "stop_usd") return "$" + (+x);
-    if ((key === "week_limit" || key === "news_min" || key === "cooldown_min") && !+x) return "off";
-    if (key === "day_limit" || key === "week_limit") return (+x) + "%";
+    if (key === "stop_usd" || key === "ladder_stop") return "$" + (+x);
+    if ((key === "week_limit" || key === "news_min" || key === "cooldown_min" || key === "max_risk") && !+x) return "off";
+    if (key === "day_limit" || key === "week_limit" || key === "max_risk") return (+x) + "%";
     if (key === "news_min" || key === "cooldown_min" || key === "max_delay") return (+x) + " min";
     return String(x);
   }
@@ -1844,7 +1857,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       parts.push(f[1] + (f[2] === "bool" ? (x ? "1" : "0") : f[0] === "lots" ? (x === "auto" ? "a" : String(+x).replace(".", "p")) :
         f[2] === "usd" ? String(Math.round(+x * 100) / 100).replace(".", "p") : String(Math.round(+x))));
     });
-    return parts.join("_");
+    var out = parts.join("_");   // Telegram allows 64 characters: a long one drops the underscores (portal.encode does the same)
+    return out.length <= 64 ? out : parts[0] + parts.slice(1).join("");
   }
   function viewSettings(v) {
     var accts = liveAccounts().filter(function (a) { return a.portal && PCODE[a.section]; }), bot = DATA.portal_bot;
@@ -1877,12 +1891,26 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         ctl.value = want[key] == null ? "" : String(want[key]);
       }
       var setHere = (a.portal.set_here || []).indexOf(key) >= 0, dft = (a.portal.defaults || {})[key];
+      if (key === "lots" && dft === "rule" && a.portal.defaults.lots_text) dft = { text: a.portal.defaults.lots_text };
       return [el("strong", { text: f[3] }), ctl, el("span", { cls: "note", text: f[4] + (setHere ? " Set here (not config.ini)." : "") +
         (dft != null && key !== "trading" ? " Default: " + portalShow(key, dft) + "." : "") })];
     });
+    // one table, a heading row per group (PGROUPS), so the settings read top to bottom in the order they act
+    var byKey = {}; FIELDS.forEach(function (f, i) { byKey[f[0]] = rows[i]; });
+    var tb = el("tbody");
+    PGROUPS.forEach(function (g) {
+      var ks = g[2].filter(function (k) { return byKey[k]; });
+      if (!ks.length) return;
+      tb.appendChild(el("tr", { cls: "pgroup" }, [el("th", { colspan: "3", scope: "colgroup" }, [g[0], el("span", { cls: "pnote", text: " · " + g[1] })])]));
+      ks.forEach(function (k) {
+        tb.appendChild(el("tr", null, byKey[k].map(function (c, i) { return el("td", { cls: i === 2 ? "wrap" : "" }, [c]); })));
+      });
+    });
+    var grid = el("div", { cls: "scroll" }, [el("table", { cls: "psettings" }, [
+      el("thead", null, [el("tr", null, ["Setting", "Value", "What it does"].map(function (h) { return el("th", { scope: "col", text: h }); }))]), tb])]);
     v.appendChild(block(a.label + ": settings", "Now in force on the account" + (a.updated ? " (reported " + when(a.updated) + ")" : "") + ". " +
       (a.portal.changed_by ? "Last changed by " + a.portal.changed_by + (a.portal.changed_at ? ", " + when(a.portal.changed_at) : "") + "." : "Not changed here yet: everything comes from config.ini."),
-      table(["Setting", "Value", "What it does"], rows, { wrap: [2] })));
+      grid));
     var msg = el("p", { cls: "note", style: "margin:8px 0" }), btn = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply in Telegram"]);
     var changedKeys = function () {
       return FIELDS.filter(function (f) { var k = f[0];
@@ -1900,6 +1928,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (ch.indexOf("news_min") >= 0 && !(+want.news_min >= 0 && +want.news_min <= 120)) bad.push("News filter must be 0 – 120 min.");
       if (ch.indexOf("cooldown_min") >= 0 && !(+want.cooldown_min >= 0 && +want.cooldown_min <= 120)) bad.push("Pause after opposite consensus must be 0 – 120 min.");
       if (ch.indexOf("max_delay") >= 0 && !(+want.max_delay >= 1 && +want.max_delay <= 10)) bad.push("Order time limit must be 1 – 10 min.");
+      if (ch.indexOf("ladder_stop") >= 0 && !(+want.ladder_stop >= 1 && +want.ladder_stop <= 50)) bad.push("Ladder stop must be $1 – $50.");
+      var riskCap = +((a.portal.defaults || {}).max_risk) || 100;
+      if (ch.indexOf("max_risk") >= 0 && !(+want.max_risk >= 1 && +want.max_risk <= riskCap)) bad.push("Max risk per order must be 1 – " + riskCap + "%" + (riskCap < 100 ? " (the admin’s cap: it can be lowered, not raised)." : "."));
       btn.disabled = !ch.length || bad.length > 0 || !bot;
       msg.textContent = bad.length ? bad.join(" ") : !ch.length ? "Change a setting above to apply it." :
         !bot ? "The tracker’s bot isn’t running, so changes can’t be sent yet." :
