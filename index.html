@@ -242,13 +242,13 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
 (function () {
   "use strict";
   var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], CLEGS = [], CSIGS = [], NOTE = "";
-  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["account", "Live account"], ["best3", "Sandbox"], ["analytics", "Analytics"], ["history", "History"]];
+  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["account", "Live account"], ["best3", "Sandbox"], ["analytics", "Analytics"], ["history", "History"], ["settings", "Settings"]];
   var OUTCOMES = ["TP hit", "Stop loss", "Trailing stop", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
   // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
   function readState() {
     var p = new URLSearchParams(location.hash.slice(1));
-    var st = { v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
+    var st = { ps: p.get("ps") || "", v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
              s: p.get("s") || "totalR", d: p.get("d") !== "0", ho: p.get("ho") || "",
              om: parseInt(p.get("om") || "0", 10) || 0, la: parseInt(p.get("la") || "0", 10) || 0, sv: p.get("sv") || (p.get("bv") === "1" ? "bandit" : ""),
              // the filter bar: period (fp, with ff/ft for chosen dates), channels (fc, one or more), side (fs), result (fr), strategy (fg)
@@ -277,6 +277,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (state.om) p.set("om", String(state.om));
     if (state.la) p.set("la", String(state.la));
     if (state.sv) p.set("sv", state.sv);
+    if (state.ps) p.set("ps", state.ps);
     history.replaceState(null, "", "#" + p.toString());
   }
   function go(changes, keepScroll) { Object.assign(state, changes); save(); render(); if (!keepScroll) window.scrollTo(0, 0); }
@@ -1010,7 +1011,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   }
   function sandboxList() {   // every strategy on trial; add new ones here
     var b = DATA.best3, out = [];
-    if (b) out.push({ k: "best3", label: "Best of 3 WoW" + (b.paper ? " (paper)" : " (" + (b.server || "MT5 demo") + ")"), view: viewBest3One });
+    if (DATA.cons_sandbox) out.push({ k: "cons", label: "Consensus, test rules (" + (DATA.cons_sandbox.server || "Sandbox demo") + ")", view: viewConsSandbox });
+    if (b) out.push({ k: "best3", label: "Best of 3" + (b.paper ? " (paper)" : " (" + (b.server || "MT5 demo") + ")"), view: viewBest3One });
     if (DATA.best10) out.push({ k: "best10", label: "Best of 10, TP1 only (" + (DATA.best10.server || "MT5 demo") + ")", view: viewBest10 });
     if (DATA.pos2w) out.push({ k: "pos2w", label: "Positive 2 weeks, TP1 only (" + (DATA.pos2w.server || "MT5 demo") + ")", view: viewPos2w });
     if (DATA.pos2w5) out.push({ k: "pos2w5", label: "Positive 2 weeks, max 5, TP1 only (" + (DATA.pos2w5.server || "MT5 demo") + ")", view: function (v) { viewBest3One(v, DATA.pos2w5, "pos2w"); } });
@@ -1026,7 +1028,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var cur = list.filter(function (x) { return x.k === state.sv; })[0];
     if (!list.length) { v.appendChild(empty("No strategy is on trial right now.")); return; }
     if (!cur) { viewSandboxCompare(v, list); return; }
-    if (cur.k !== "own" && cur.k !== "best10" && cur.k !== "pos2w" && cur.k !== "pos2w5") v.appendChild(b3BackfillNote());
+    if (cur.k !== "own" && cur.k !== "cons" && cur.k !== "best10" && cur.k !== "pos2w" && cur.k !== "pos2w5") v.appendChild(b3BackfillNote());
     cur.view(v);
   }
   function viewSandboxCompare(v, list) {   // one line per strategy: how each is doing
@@ -1044,8 +1046,11 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var rows = [];
     list.forEach(function (x) {
       if (x.k === "best3") { var b = DATA.best3;
-        rows.push(line("Best of 3 WoW", b.paper ? "Paper" : (b.server || "MT5 demo") + " " + (b.account || ""), b.trades || [], b.currency || "USD", b.week,
+        rows.push(line("Best of 3", b.paper ? "Paper" : (b.server || "MT5 demo") + " " + (b.account || ""), b.trades || [], b.currency || "USD", b.week,
           b.summary && b.summary.avg_r != null ? b.summary.avg_r : null, b.lots + " per position")); }
+      if (x.k === "cons") { var cs = DATA.cons_sandbox;
+        rows.push(line("Consensus, test rules", (cs.server || "Sandbox demo") + " " + (cs.account || ""), (cs.trades || []).map(function (r) { return Object.assign({ grp: "Consensus" }, r, { status: r.status === "Pending" ? "Waiting" : r.status }); }),
+          cs.currency || "USD", DATA.best3 && DATA.best3.week, null, cs.lots_now + " now (" + cs.lots_rule + ")")); }
       if (x.k === "best10") { var t10 = DATA.best10;
         rows.push(line("Best of 10, TP1 only", (t10.server || "MT5 demo") + " " + (t10.account || ""), t10.trades || [], t10.currency || "USD", t10.week, null, t10.lots + " per position")); }
       if (x.k === "pos2w5") { var p5 = DATA.pos2w5;
@@ -1092,6 +1097,31 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       lc.map(function (l) { return [when(l.posted_at), sideCell(l), l.fill_price, l.exit_price, l.outcome || "", rCell(l.r_multiple)]; }), { num: [2, 3, 5] })
       : empty("No closed own signals yet.")));
   }
+  function viewConsSandbox(v) {   // consensus with test rules on the Sandbox demo (since 20 Nov)
+    var cs = DATA.cons_sandbox, cur = cs.currency || "USD";
+    var rows = (cs.trades || []).map(function (r) { return Object.assign({ grp: "Consensus" }, r); }).filter(function (x) { return orderOK(x, null, "Consensus"); })
+      .sort(function (a, b) { return (a.at || "") < (b.at || "") ? 1 : -1; });
+    var done = rows.filter(function (x) { return x.profit != null && x.exit_time; }), net = sum(done.map(function (x) { return x.profit; }));
+    var isL = function (x) { return /ladder/i.test(x.kind || "") || x.tag === "ladder"; };
+    var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
+    var part = function (f) { var d = done.filter(f); return [d.length, pct(d.filter(function (x) { return x.profit > 0; }).length, d.length), d.length ? money(sum(d.map(function (x) { return x.profit; }))) : "–"]; };
+    var c1 = part(function (x) { return !isL(x); }), l1 = part(isL);
+    v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
+      "The tracker’s consensus and ladder orders, traded on the Sandbox demo (" + (cs.server || "") + ", account " + (cs.account || "") + ") with TEST rules before they reach the live accounts: " +
+      (cs.rules || "") + ". " + (cs.new_orders === false ? "New orders are paused. " : "") +
+      "The live accounts and the Pepperstone demo run the live rules (Live account tab); compare the two to decide what to ship." }));
+    v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["Orders placed", rows.filter(function (x) { return x.ticket; }).length], ["Closed", done.length],
+      ["Win rate", pct(done.filter(function (x) { return x.profit > 0; }).length, done.length)], ["Net", done.length ? money(net) : "–"],
+      ["Consensus closed / won / net", c1[0] + " · " + c1[1] + " · " + c1[2]], ["Ladder closed / won / net", l1[0] + " · " + l1[1] + " · " + l1[2]]].map(function (k) {
+      return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "Net" ? cls(net) : "", text: String(k[1]) })]); })));
+    v.appendChild(block("Consensus orders on the Sandbox", "Newest first. “Not taken” rows show why (cooldown, news, early ladder skip …).", rows.length ? table(
+      ["Date", "Time", "Side", "Order", "Status", "Profit", "Lots", "Entry", "SL", "TP", "Fill price", "Exit price", "Exit time", "Note"],
+      rows.slice(0, 150).map(function (x) {
+        return [dateOnly(x.at), timeOnly(x.at), x.side ? sideCell(x) : "", x.kind || "", x.status === "Skipped" ? "Not taken" : (x.status || ""),
+          x.profit == null ? "" : el("span", { cls: x.profit > 0 ? "win" : x.profit < 0 ? "loss" : "", text: money(x.profit) }),
+          x.volume == null ? "" : x.volume, x.entry, x.sl, x.tp, x.fill_price, x.exit_price, x.exit_time ? when(x.exit_time) : "", x.note || ""];
+      }), { num: [5, 6, 7, 8, 9, 10, 11], wrap: [13] }) : empty("No consensus orders on the Sandbox yet.")));
+  }
   function viewPos2w(v) {   // Positive 2 weeks, TP1 only (Sandbox trial since 17 Nov)
     viewBest3One(v, DATA.pos2w, "pos2w");
   }
@@ -1100,7 +1130,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   }
   function viewBest3One(v, rep, ten) {   // Best of 3 WoW: last week's three best channels, copied this week (its own MT5 account)
     var b = rep || DATA.best3;
-    if (!b) { v.appendChild(empty((ten ? "Best of 10" : "Best of 3 WoW") + " isn’t running.")); return; }
+    if (!b) { v.appendChild(empty((ten ? "Best of 10" : "Best of 3") + " isn’t running.")); return; }
     var cur = b.currency || "", allRows = b.trades || [], rows = allRows.filter(function (x) { return orderOK(x, null, x.grp); }), caps = b.caps || [3, 2, 1];
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
     var mcell = function (x) { return x == null ? "" : el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: money(x) }); };
@@ -1201,7 +1231,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     return el("p", { cls: "note", style: "margin-bottom:12px;max-width:80ch", text:
       "“Include backfill” doesn’t apply to this tab. Best of 3 shows real orders on its own MT5 demo, and the channel bandit counts results only from live signals " +
       "(since 9 Nov): backfilled signals were found after the fact and could never have been copied. They only feed the bandit’s beliefs, at half weight. " +
-      "The 9-week backtest that includes backfill is in Best of 3 WoW\\README.md (about +349R for Best of 3, +348R for the bandit; backfill flatters both)." });
+      "The 9-week backtest that includes backfill is in Sandbox\\README.md (about +349R for Best of 3, +348R for the bandit; backfill flatters both)." });
   }
   function viewBandit(v) {   // Best of 3 WoW's channel bandit (bandit.py): explore/exploit channel picks, paper only
     var k = DATA.bandit, allRows = k.trades || [], rows = allRows.filter(function (x) { return orderOK(x, null, x.grp); }), caps = k.caps || [3, 2, 1], st = k.settings || {};
@@ -1618,6 +1648,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var bar = document.getElementById("fbar"), out = document.getElementById("fsum");
     if (!bar) return;
     bar.textContent = ""; out.textContent = "";
+    bar.style.display = out.style.display = state.v === "settings" ? "none" : "";   // the Settings tab has no filters
     var f = fx(), so = stratOptions();
     var select = function (label, val, opts, pick) {
       var x = el("select", { "aria-label": label, cls: val ? "on" : "", on: { change: function (e) { pick(e.target.value); } } },
@@ -1781,13 +1812,94 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     }
     split(); render();
   }
+  // ---------- Settings (owner portal, since 21 Nov): each owner changes their own live account, confirmed in Telegram ----------
+  var PFIELDS = [["trading", "T", "bool", "Trading", "New orders on, or paused (open trades keep their stop and target)."],
+    ["lots", "L", "lots", "Lots", "Auto (0.01 per $1,000 of balance, at least 0.01) or a fixed size per consensus order."],
+    ["day_limit", "D", "int", "Daily loss limit %", "No new orders once the day’s loss (closed + open) reaches this. 5 – 50."],
+    ["week_limit", "W", "int", "Weekly loss limit %", "0 = off. No new order if the week could lose more than this. 0 – 80."],
+    ["max_open", "M", "int", "Max open trades", "Open plus waiting orders at once. 1 – 5."],
+    ["ladder", "R", "bool", "Ladder orders", "A second, half-size order $5 better than the consensus entry."],
+    ["early_exit", "E", "bool", "Early exit", "Close at −$5 if price rushes against the trade within 2 minutes."],
+    ["profit_lock", "P", "bool", "Profit lock", "Once +$4 in profit, the stop moves to +$2."],
+    ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close while in profit when a voting channel posts the other way."]];
+  var PCODE = { live: "1", live2: "2", live3: "3" };
+  function portalPayload(sec, vals) {
+    var parts = ["s" + PCODE[sec]];
+    PFIELDS.forEach(function (f) {
+      if (!(f[0] in vals)) return;
+      var x = vals[f[0]];
+      parts.push(f[1] + (f[2] === "bool" ? (x ? "1" : "0") : f[0] === "lots" ? (x === "auto" ? "a" : String(+x).replace(".", "p")) : String(Math.round(+x))));
+    });
+    return parts.join("_");
+  }
+  function viewSettings(v) {
+    var accts = liveAccounts().filter(function (a) { return a.portal && PCODE[a.section]; }), bot = DATA.portal_bot;
+    v.appendChild(el("p", { style: "margin:0 0 14px;max-width:80ch" }, [el("strong", { text: "Account settings: " }),
+      "each live account’s owner changes their own account here. Pick the account, tick the settings, then press “Apply in Telegram”: the tracker’s bot shows the changes and applies them only when the account’s owner (or the admin) taps Apply. The account uses them within a few seconds, no restart. Shared rules (which channels vote, channel rules, the Sandbox) stay with the admin."]));
+    if (!accts.length) { v.appendChild(empty("No live account reports its settings yet (the live traders show them after their next restart).")); return; }
+    var sec = accts.some(function (a) { return a.section === state.ps; }) ? state.ps : accts[0].section;
+    var a = accts.filter(function (x) { return x.section === sec; })[0], cur = a.portal.values || {}, maxL = a.portal.max_lots || 0.1;
+    var want = {}; PFIELDS.forEach(function (f) { want[f[0]] = cur[f[0]]; });
+    if (cur.lots_rule || want.lots == null) want.lots = cur.lots;
+    var pick = el("select", { "aria-label": "Account", on: { change: function (e) { go({ ps: e.target.value }, true); } } },
+      accts.map(function (x) { return el("option", { value: x.section, selected: x.section === sec ? "selected" : null, text: x.label + " (" + (x.server || "") + " " + (x.account || "") + ")" }); }));
+    v.appendChild(el("div", { style: "margin-bottom:14px" }, [pick]));
+    var rows = PFIELDS.map(function (f) {
+      var key = f[0], ctl;
+      if (f[2] === "bool") {
+        ctl = el("input", { type: "checkbox", on: { change: function (e) { want[key] = e.target.checked; update(); } } });
+        ctl.checked = !!want[key];
+      } else if (key === "lots") {
+        var isAuto = String(want.lots) === "auto";
+        var num = el("input", { type: "number", min: "0.01", max: String(maxL), step: "0.01", style: "width:7em", on: { input: function (e) { want.lots = e.target.value; update(); } } });
+        num.value = isAuto ? "" : String(want.lots || ""); num.disabled = isAuto;
+        var auto = el("input", { type: "checkbox", on: { change: function (e) { want.lots = e.target.checked ? "auto" : (num.value || String(Math.min(0.01, maxL))); num.disabled = e.target.checked; if (!e.target.checked && !num.value) num.value = want.lots; update(); } } });
+        auto.checked = isAuto;
+        ctl = el("span", null, [el("label", null, [auto, " auto"]), " or ", num, el("span", { cls: "note", text: " lots (max " + maxL + ")" })]);
+      } else {
+        ctl = el("input", { type: "number", step: "1", style: "width:6em", on: { input: function (e) { want[key] = e.target.value; update(); } } });
+        ctl.value = want[key] == null ? "" : String(want[key]);
+      }
+      var setHere = (a.portal.set_here || []).indexOf(key) >= 0;
+      return [el("strong", { text: f[3] }), ctl, el("span", { cls: "note", text: f[4] + (setHere ? " Set here (not config.ini)." : "") })];
+    });
+    v.appendChild(block(a.label + ": settings", "Now in force on the account" + (a.updated ? " (reported " + when(a.updated) + ")" : "") + ". " +
+      (a.portal.changed_by ? "Last changed by " + a.portal.changed_by + (a.portal.changed_at ? ", " + when(a.portal.changed_at) : "") + "." : "Not changed here yet: everything comes from config.ini."),
+      table(["Setting", "Value", "What it does"], rows, { wrap: [2] })));
+    var msg = el("p", { cls: "note", style: "margin:8px 0" }), btn = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply in Telegram"]);
+    var changedKeys = function () {
+      return PFIELDS.filter(function (f) { var k = f[0];
+        if (f[2] === "bool") return !!want[k] !== !!cur[k];
+        if (k === "lots") return String(want.lots) !== String(cur.lots) || cur.lots_rule && String(want.lots) !== String(cur.lots);
+        return +want[k] !== +cur[k]; }).map(function (f) { return f[0]; });
+    };
+    function update() {
+      var ch = changedKeys(), bad = [];
+      if (ch.indexOf("lots") >= 0 && want.lots !== "auto" && !(+want.lots >= 0.01 && +want.lots <= maxL)) bad.push("Lots must be 0.01 – " + maxL + ".");
+      if (!(+want.day_limit >= 5 && +want.day_limit <= 50)) bad.push("Daily loss limit must be 5 – 50.");
+      if (!(+want.week_limit >= 0 && +want.week_limit <= 80)) bad.push("Weekly loss limit must be 0 – 80.");
+      if (!(+want.max_open >= 1 && +want.max_open <= 5)) bad.push("Max open trades must be 1 – 5.");
+      btn.disabled = !ch.length || bad.length > 0 || !bot;
+      msg.textContent = bad.length ? bad.join(" ") : !ch.length ? "Change a setting above to apply it." :
+        !bot ? "The tracker’s bot isn’t running, so changes can’t be sent yet." :
+        "Changes: " + ch.map(function (k) { return PFIELDS.filter(function (f) { return f[0] === k; })[0][3]; }).join(", ") + ". Telegram opens with them; tap Start, then Apply.";
+    }
+    btn.addEventListener("click", function () {
+      var vals = {}; changedKeys().forEach(function (k) { vals[k] = want[k]; });
+      window.open("https://t.me/" + bot + "?start=" + portalPayload(sec, vals), "_blank");
+    });
+    v.appendChild(el("div", { cls: "panel" }, [btn, msg,
+      el("p", { cls: "note", text: "First time? Send /start to " + (bot ? "@" + bot : "the tracker’s bot") + " in Telegram; the admin links you to your account. In Telegram you can also use /settings, /pause and /resume." })]));
+    update();
+  }
+
   function render() {
     FX = null; MEMO = {};
     renderHeader();
     var v = document.getElementById("view");
     v.textContent = "";
     POST = [];
-    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, best3: viewBest3, analytics: viewAnalytics, history: viewHistory }[state.v] || viewOverview)(v);
+    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, best3: viewBest3, analytics: viewAnalytics, history: viewHistory, settings: viewSettings }[state.v] || viewOverview)(v);
     var secs = v.querySelectorAll("section.block");
     if (secs.length > 1) {   // collapse or expand every section of this tab at once
       var all = function (folded) { v.querySelectorAll("section.block").forEach(function (s) { setFold(s, folded); }); saveFold(); if (!folded) render(); };
@@ -1889,7 +2001,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   }
   form.addEventListener("submit", function (e) { e.preventDefault(); err.textContent = "Opening…"; open(pw.value, true); });
   lockBtn.addEventListener("click", function () { store(null); password = null; cache = {}; lastStamp = null; pw.value = ""; locked(""); });
-  setInterval(function () { var a = document.activeElement; if (password && (!a || !/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))) open(password, false); }, EVERY_MIN * 60000);
+  setInterval(function () { var a = document.activeElement; if (password && (!a || !/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) && !/(^#|&)v=settings(&|$)/.test(location.hash)) open(password, false); }, EVERY_MIN * 60000);
 
   GST.setLoader(function (m) {   // older months: archive/<month>.json next to data.json, encrypted the same way
     load(password, SRC.replace(/data\.json$/, "archive/" + m + ".json"))
