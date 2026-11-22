@@ -457,7 +457,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function stratFilter() {   // the Strategy filter where it applies (Consensus and Live account tabs; the Sandbox picks with sv)
     var g = state.fg;
     if (state.v === "consensus") return g === "consensus" || g === "ladder" ? g : "";
-    if (state.v === "account") return ["consensus", "ladder", "best3", "own"].indexOf(g) >= 0 ? g : "";
+    if (state.v === "account") return ["consensus", "ladder", "best10", "best3", "own"].indexOf(g) >= 0 ? g : "";
     return "";
   }
   function stratOK(kind) { var g = stratFilter(); return !g || g === kind; }
@@ -476,7 +476,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function filterChannels() {   // every channel the bar can pick: the channels' signals and the strategies' channels
     var set = new Set(channels());
     [DATA.best3, DATA.best10, DATA.pos2w, DATA.pos2w5, DATA.bandit].forEach(function (b) { ((b && b.trades) || []).forEach(function (x) { if (x.grp) set.add(x.grp); }); });
-    liveAccounts().forEach(function (a) { ((a.best3 && a.best3.trades) || []).forEach(function (x) { if (x.grp) set.add(x.grp); }); });
+    liveAccounts().forEach(function (a) { [a.best3, a.best10].forEach(function (b) { ((b && b.trades) || []).forEach(function (x) { if (x.grp) set.add(x.grp); }); }); });
     state.fc.forEach(function (g) { set.add(g); });
     var key = function (g) { return String(g).normalize("NFKC").toLowerCase(); };
     return Array.from(set).sort(function (a, b) { return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0; });
@@ -1016,7 +1016,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function sandboxList() {   // every strategy on trial; add new ones here
     var b = DATA.best3, out = [];
     if (DATA.cons_sandbox) out.push({ k: "cons", label: "Consensus, test rules (" + (DATA.cons_sandbox.server || "Sandbox demo") + ")", view: viewConsSandbox });
-    if (b) out.push({ k: "best3", label: "Best of 3" + (b.paper ? " (paper)" : " (" + (b.server || "MT5 demo") + ")"), view: viewBest3One });
+    if (b) out.push({ k: "best3", label: "Best of 3" + (b.new_orders === false ? ", archived" : "") + (b.paper ? " (paper)" : " (" + (b.server || "MT5 demo") + ")"), view: viewBest3One });   // archived 22 Nov 2026 (new_orders = no)
     if (DATA.best10) out.push({ k: "best10", label: b10Name(DATA.best10) + " (" + (DATA.best10.server || "MT5 demo") + ")", view: viewBest10 });
     if (DATA.pos2w) out.push({ k: "pos2w", label: "Positive 2 weeks, TP1 only (" + (DATA.pos2w.server || "MT5 demo") + ")", view: viewPos2w });
     if (DATA.pos2w5) out.push({ k: "pos2w5", label: "Positive 2 weeks, max 5, TP1 only (" + (DATA.pos2w5.server || "MT5 demo") + ")", view: function (v) { viewBest3One(v, DATA.pos2w5, "pos2w"); } });
@@ -1054,7 +1054,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var rows = [];
     list.forEach(function (x) {
       if (x.k === "best3") { var b = DATA.best3;
-        rows.push(line("Best of 3", b.paper ? "Paper" : (b.server || "MT5 demo") + " " + (b.account || ""), b.trades || [], b.currency || "USD", b.week,
+        rows.push(line("Best of 3" + (b.new_orders === false ? " (archived)" : ""), b.paper ? "Paper" : (b.server || "MT5 demo") + " " + (b.account || ""), b.trades || [], b.currency || "USD", b.week,
           b.summary && b.summary.avg_r != null ? b.summary.avg_r : null, b.lots + " per position")); }
       if (x.k === "cons") { var cs = DATA.cons_sandbox;
         rows.push(line("Consensus, test rules", (cs.server || "Sandbox demo") + " " + (cs.account || ""), (cs.trades || []).map(function (r) { return Object.assign({ grp: "Consensus" }, r, { status: r.status === "Pending" ? "Waiting" : r.status }); }),
@@ -1291,6 +1291,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     return DATA.liveaccounts && DATA.liveaccounts.length ? DATA.liveaccounts : (DATA.livetrades ? [DATA.livetrades] : []);
   }
   // ---------- strategies on a live account (since 18 Nov 2026): every strategy that ever traded it stays listed, on or off ----------
+  var COPY_STRATS = [["best10", "Best of 10"], ["best3", "Best of 3"]];   // copy strategies next to the consensus (Best of 10 since 22 Nov 2026)
   function acctStrats(lt) {
     var sg = stratFilter(), out = [], on = lt.orders || [];
     var lastOf = function (rows) { return rows.map(function (x) { return x.at || ""; }).filter(Boolean).sort().pop() || ""; };
@@ -1303,14 +1304,16 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         open: rows.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length,
         skipped: rows.filter(function (x) { return x.status === "Skipped" || x.status === "Failed"; }).length });
     });
-    if (lt.best3) {   // on, or switched off with its past orders kept (best3.off)
-      var all = lt.best3.trades || [], rows = all.filter(function (x) { return orderOK(x, "best3", x.grp); });
-      out.push({ key: "best3", name: "Best of 3", on: !lt.best3.off, rows: rows, last: lt.best3.last || lastOf(all),
+    COPY_STRATS.forEach(function (k) {   // Best of 10 / Best of 3: on, winding down, or switched off with its past orders kept (.off)
+      var b = lt[k[0]];
+      if (!b) return;
+      var all = b.trades || [], rows = all.filter(function (x) { return orderOK(x, k[0], x.grp); });
+      out.push({ key: k[0], name: k[1], on: !b.off && !b.winding_down, rows: rows, last: b.last || lastOf(all),
         done: rows.filter(function (x) { return x.profit != null; }),
         open: rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Closing"; }).length,
         skipped: rows.filter(function (x) { return x.status === "Not copied"; }).length +
           Object.keys(rows.filter(function (x) { return x.status === "Paused"; }).reduce(function (o, x) { o[x.at + x.grp] = 1; return o; }, {})).length });
-    }
+    });
     return out.filter(function (st) { return !sg || st.key === sg; });
   }
   function stratTotals(list, name) {   // closed, net, wins, this week and today (by the time the order was placed), for one line or the total
@@ -1399,16 +1402,20 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var sg = stratFilter(), per = fx().period;
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
     money.cur = cur;
-    var b3off = lt.best3 && lt.best3.off;
+    var copyNote = COPY_STRATS.map(function (k) {   // Best of 10 / Best of 3 on this account, in words
+      var b = lt[k[0]];
+      if (!b) return "";
+      if (b.off) return ". " + k[1] + " is switched off here (last order " + dateOnly(b.last) + "); its past orders stay below and in the totals";
+      return ". " + k[1] + (b.winding_down ? " is switched off and winding down (no new signals; its open positions are followed to their TP or SL)"
+        : " also trades this account: " + b.lots_now + " lots per position now" + (b.max_open_shared ? " within the account’s shared max open trades" : ", at most " + b.max_open + " open") +
+          ", stops at most $" + b.max_sl + " away (this week: " + ((b.ranking || []).join(", ") || "no channel") + ")") + "; its orders are in a table below";
+    }).join("");
     v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
       (lt.mirror ? "Demo mirror: the Pepperstone demo (" + (lt.server || "") + ", account " + (lt.account || "") + ") runs exactly what the live accounts run, so its results show what they should be doing at demo prices. It places the " + (lt.orders || []).join(" and ") +
         " orders the live accounts copy (own signals now trade on the Sandbox demo), with its own size and limits: "
       : (lt.label ? lt.label + ": your" : "Your") + " live account (" + (lt.server || "") + ", account " + (lt.account || "") + "). It copies the demo’s " + (lt.orders || []).join(" and ") +
       " orders (never own signals) with its own size and limits: ") + (lt.lots_rule || (lt.lots_per_1000 + " lots per $1,000 of balance, at least " + lt.min_lots)) +
-      " (" + lt.lots_now + " lots now), at most " + lt.max_open + " open or pending" +
-      (lt.best3 && !b3off ? ". Best of 3 also trades this account: " + lt.best3.lots_now + " lots per position now, at most " + lt.best3.max_open +
-        " open, stops at most $" + lt.best3.max_sl + " away (this week: " + ((lt.best3.ranking || []).join(", ") || "no channel") + "); its orders are in the second table below" : "") +
-      (b3off ? ". Best of 3 is switched off here (last order " + dateOnly(lt.best3.last) + "); its past orders stay below and in the totals" : "") +
+      " (" + lt.lots_now + " lots now), at most " + lt.max_open + " open or pending" + (lt.mirror ? "" : " (every strategy together)") + copyNote +
       ", daily loss limit " + lt.day_limit + "% for the whole account. Results are the broker’s, in " + cur +
       "; open trades’ running profit shows in MT5. Last change " + when(lt.updated) + "." }));
     var lines = acctStrats(lt).map(function (st) { return stratTotals([st], st.name); }), total = stratTotals(lines, "All strategies");
@@ -1417,7 +1424,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       (per ? "" : "This week and today go by the time the order was placed: this week from Sunday 23:00 Nairobi, today from 00:00 Nairobi. ") +
       (fx().any || sg ? "Only orders that pass the filters above." : ""),
       lines.length ? stratTable(lines, total, money, per) : empty("No strategy on this account matches the filters above.")));
-    if (sg !== "best3") v.appendChild(block("Consensus and ladder orders", lt.mirror ? "Newest first. The orders the live accounts copy; “Not taken”: the demo’s own limits skipped it (the note says why)." : "Newest first. “Not taken”: the demo placed it but the live account’s own limits skipped it (the note says why).", at.length ? table(
+    if (sg !== "best3" && sg !== "best10") v.appendChild(block("Consensus and ladder orders", lt.mirror ? "Newest first. The orders the live accounts copy; “Not taken”: the demo’s own limits skipped it (the note says why)." : "Newest first. “Not taken”: the demo placed it but the live account’s own limits skipped it (the note says why).", at.length ? table(
       ["Date", "Time", "Side", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP", "Fill price", "Fill time", "Exit price", "Exit time", "Note"],
       at.map(function (x) {
         return [dateOnly(x.at), timeOnly(x.at), x.side ? sideCell(x) : "", x.status === "Skipped" ? "Not taken" : (x.status || ""),
@@ -1425,12 +1432,15 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
           x.kind || "", x.volume == null ? "" : x.volume, x.entry, x.sl, x.tp,
           x.fill_price, x.fill_time ? when(x.fill_time) : "", x.exit_price, x.exit_time ? when(x.exit_time) : "", x.note || ""];
       }), { num: [4, 6, 7, 8, 9, 10, 12], wrap: [14] }) : empty(fx().any || sg ? "No orders match the filters above." : "No live orders yet. The next consensus or ladder order the demo places is copied here within seconds.")));
-    if (lt.best3 && (!sg || sg === "best3")) {   // Best of 3 also trades this live account: its own orders, one row per TP
-      var b3r = (lt.best3.trades || []).filter(function (x) { return orderOK(x, "best3", x.grp); }), b3d = b3r.filter(function (x) { return x.profit != null; });
+    COPY_STRATS.forEach(function (k) {   // Best of 10 / Best of 3 on this live account: its own orders, one row per TP
+      var bb = lt[k[0]];
+      if (!bb || (sg && sg !== k[0])) return;
+      var b3r = (bb.trades || []).filter(function (x) { return orderOK(x, k[0], x.grp); }), b3d = b3r.filter(function (x) { return x.profit != null; });
       var b3net = sum(b3d.map(function (x) { return x.profit; }));
-      var pn = pauseNotes(lt.best3.pause_log, lt.best3.week), pnk = Object.keys(pn), ps = pausedSummary(b3r, money);
-      v.appendChild(block("Best of 3 orders on this account" + (b3off ? " (switched off)" : ""), "Newest first, one row per TP. " +
-        (b3off ? "Best of 3 is switched off on this account; these are its past orders. " : "This week’s channels: " + ((lt.best3.ranking || []).join(", ") || "none")) +
+      var pn = pauseNotes(bb.pause_log, bb.week), pnk = Object.keys(pn), ps = pausedSummary(b3r, money);
+      v.appendChild(block(k[1] + " orders on this account" + (bb.off ? " (switched off)" : bb.winding_down ? " (winding down)" : ""), "Newest first, one row per TP. " +
+        (bb.off ? k[1] + " is switched off on this account; these are its past orders. " : bb.winding_down ? k[1] + " is switched off: no new signals, its open positions are followed to their TP or SL. "
+          : "This week’s channels: " + ((bb.ranking || []).join(", ") || "none")) +
         (pnk.length ? " (" + pnk.map(function (g) { return g + ": " + pn[g]; }).join("; ") + ")" : "") +
         ". Closed: " + b3d.length + ", win rate " + pct(b3d.filter(function (x) { return x.profit > 0; }).length, b3d.length) + ", net " + (b3d.length ? money(b3net) : "–") +
         ". Running profit of open positions shows in MT5." + (ps ? " Paused: a channel under its win-rate floor this week isn’t copied; its signals are tracked here as if they were trading (status Paused, the would-be result in brackets): " + ps + "." : ""),
@@ -1443,8 +1453,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
             paused ? (x.would == null ? "" : el("span", { cls: "muted", text: "(" + money(x.would) + ")" }))
               : x.profit == null ? "" : el("span", { cls: x.profit > 0 ? "win" : x.profit < 0 ? "loss" : "", text: money(x.profit) }),
             paused ? "not traded" : (x.kind || ""), x.lots == null ? "" : x.lots, x.entry, x.sl, x.tp, x.exit, x.note || ""];
-        }), { num: [6, 8, 9, 10, 11, 12], wrap: [13] }) : empty(fx().any || sg ? "No Best of 3 orders match the filters above." : "No Best of 3 orders on this account yet.")));
-    }
+        }), { num: [6, 8, 9, 10, 11, 12], wrap: [13] }) : empty(fx().any || sg ? "No " + k[1] + " orders match the filters above." : "No " + k[1] + " orders on this account yet.")));
+    });
   }
   function ownStatus(v) {   // own signals: 4-hour trend and the zones being watched
     var os = DATA.own_status;
@@ -1600,6 +1610,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (state.v === "consensus") return { key: "fg", value: stratFilter(), opts: [["", "Consensus and ladder"], ["consensus", "Consensus only"], ["ladder", "Ladder only"]] };
     if (state.v === "account") {
       var o = [["", "All strategies"], ["consensus", "Consensus"], ["ladder", "Ladder"]], la = liveAccounts();
+      if (la.some(function (a) { return a.best10; })) o.push(["best10", "Best of 10"]);
       if (la.some(function (a) { return a.best3; })) o.push(["best3", "Best of 3"]);
       if (la.some(function (a) { return (a.trades || []).some(function (x) { return orderKind(x) === "own"; }); })) o.push(["own", "Own signals"]);
       return { key: "fg", value: stratFilter(), opts: o };
@@ -1825,27 +1836,32 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     split(); render();
   }
   // ---------- Settings (owner portal, since 21 Nov): each owner changes their own live account, confirmed in Telegram ----------
-  var PFIELDS = [["trading", "T", "bool", "Trading", "New orders on, or paused (open trades keep their stop and target)."],
-    ["lots", "L", "lots", "Lots", "Auto (0.01 per $1,000 of balance, at least 0.01) or a fixed size per consensus order."],
-    ["day_limit", "D", "int", "Daily loss limit %", "No new orders once the day’s loss (closed + open) reaches this. 5 – 50."],
-    ["week_limit", "W", "int", "Weekly loss limit %", "0 = off. No new order if the week could lose more than this. 0 – 80."],
-    ["max_open", "M", "int", "Max open trades", "Open plus waiting orders at once. 1 – 5."],
-    ["ladder", "R", "bool", "Ladder orders", "A second, half-size order $5 better than the consensus entry."],
+  var PFIELDS = [["trading", "T", "bool", "Trading", "New orders on, or paused, for every strategy on the account (open trades keep their stop and target)."],
+    ["lots", "L", "lots", "Lots", "Auto (0.01 per $1,000 of balance, at least 0.01) or a fixed size: every consensus order and every Best of 10 position."],
+    ["day_limit", "D", "int", "Daily loss limit %", "No new orders from any strategy once the day’s loss (closed + open, all strategies) reaches this. 5 – 50."],
+    ["week_limit", "W", "int", "Weekly loss limit %", "0 = off. No new order from any strategy if the week could lose more than this. 0 – 80."],
+    ["max_open", "M", "int", "Max open trades", "Open plus waiting orders at once, every strategy together (a Best of 10 signal opens one position per TP, as many as fit). 1 – 20."],
+    ["consensus", "Q", "bool", "Consensus orders", "Trade the consensus: 2+ independent channels agree. Off = no consensus orders (and no ladder)."],
+    ["ladder", "R", "bool", "Ladder orders", "A second, half-size order $5 better than the consensus entry (needs consensus orders on)."],
+    ["best10", "B", "bool", "Best of 10, every TP", "Copy every TP of each new signal from last week’s best channels (how many: the next row), breakeven once half the TPs hit. Locked until the admin unlocks it for this account."],
+    ["best10_top", "H", "int", "Channels to copy", "How many of last week’s best channels Best of 10 copies (3 = the old Best of 3’s pick). A change re-ranks the week at once. 1 – 10."],
     ["early_exit", "E", "bool", "Early exit", "Close at −$5 if price rushes against the trade within 2 minutes."],
     ["profit_lock", "P", "bool", "Profit lock", "Once +$4 in profit, the stop moves to +$2."],
     ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close the consensus trade (and its ladder) while in profit when a voting channel posts the other way."],
     ["stop_usd", "S", "usd", "Consensus stop $", "Stop this many dollars from the entry (10 = 100 pips). Bigger = more lost at each stop. $1 – $50."],
-    ["news_min", "N", "int", "News filter (min)", "No new orders this many minutes either side of high-impact US news. 0 = off. 0 – 120."],
-    ["cooldown_min", "C", "int", "Pause after opposite consensus (min)", "No order this many minutes after a consensus the other way. 0 = off. 0 – 120."],
-    ["max_delay", "F", "int", "Order time limit (min)", "No order if the signal is older than this when it reaches the account. 1 – 10."],
+    ["news_min", "N", "int", "News filter (min)", "No new orders (any strategy) this many minutes either side of high-impact US news. 0 = off. 0 – 120."],
+    ["cooldown_min", "C", "int", "Pause after opposite consensus (min)", "No order (consensus, ladder or Best of 10) this many minutes after a consensus the other way. 0 = off. 0 – 120."],
+    ["max_delay", "F", "int", "Order time limit (min)", "No order (any strategy) if the signal is older than this when it reaches the account. 1 – 10."],
     ["ladder_stop", "K", "usd", "Ladder stop $", "Stop this many dollars from the ladder’s entry. Bigger = more lost at each stop. $1 – $50."],
-    ["max_risk", "Z", "int", "Max risk per order %", "No single order can lose more than this share of the balance at its stop: a bigger one is cut down to the largest size that fits. Can be lowered here, not raised above the admin’s cap."]];
+    ["max_risk", "Z", "int", "Max risk per order %", "No single order or position (any strategy) can lose more than this share of the balance at its stop: a bigger one is cut down to the largest size that fits. Can be lowered here, not raised above the admin’s cap."]];
   // the Settings tab shows them in these groups (portal.py GROUPS, the same order in Telegram's /settings)
-  var PGROUPS = [["Account", "on/off, size and how many orders at once", ["trading", "lots", "max_open"]],
-    ["Loss limits", "how much one order, a day or a week can lose", ["max_risk", "day_limit", "week_limit"]],
-    ["When new orders are allowed", "checked before every consensus and ladder order", ["news_min", "cooldown_min", "max_delay"]],
+  // (22 Nov 2026) Account, Loss limits and When new orders are allowed are the ACCOUNT's: shared by every strategy ticked
+  var PGROUPS = [["Account", "on/off, size and how many orders at once: shared by every strategy", ["trading", "lots", "max_open"]],
+    ["Strategies", "what trades this account (Best of 10 unlocks when the admin allows it)", ["consensus", "ladder", "best10", "best10_top"]],
+    ["Loss limits", "how much one order, a day or a week can lose: shared by every strategy", ["max_risk", "day_limit", "week_limit"]],
+    ["When new orders are allowed", "checked before every order, whichever strategy places it", ["news_min", "cooldown_min", "max_delay"]],
     ["Consensus trade", "the main order: its stop and how it can close early", ["stop_usd", "early_exit", "profit_lock", "opposite_exit"]],
-    ["Ladder order", "the second, half-size order $5 better than the consensus entry", ["ladder", "ladder_stop"]]];
+    ["Ladder order", "the second, half-size order $5 better than the consensus entry", ["ladder_stop"]]];
   var PCODE = { live: "1", live2: "2", live3: "3" };
   function portalShow(key, x) {   // a setting's value in words (the defaults note)
     if (x && x.text) return x.text;
@@ -1871,7 +1887,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function viewSettings(v) {
     var accts = liveAccounts().filter(function (a) { return a.portal && PCODE[a.section]; }), bot = DATA.portal_bot;
     v.appendChild(el("p", { style: "margin:0 0 14px;max-width:80ch" }, [el("strong", { text: "Account settings: " }),
-      "each live account’s owner changes their own account here. Pick the account, tick the settings, then press “Apply in Telegram”: the tracker’s bot shows the changes and applies them only when the account’s owner (or the admin) taps Apply. The account uses them within a few seconds, no restart. Shared rules (which channels vote and what makes a consensus, channel rules, the demo, the Sandbox) stay with the admin."]));
+      "each live account’s owner changes their own account here. Pick the account, tick the settings, then press “Apply in Telegram”: the tracker’s bot shows the changes and applies them only when the account’s owner (or the admin) taps Apply. The account uses them within a few seconds, no restart. Tick the strategies that trade the account; the account’s size, open-trade and loss limits and its entry rules apply to all of them together. Shared rules (which channels vote and what makes a consensus, channel rules, the demo, the Sandbox) stay with the admin."]));
     if (!accts.length) { v.appendChild(empty("No live account reports its settings yet (the live traders show them after their next restart).")); return; }
     var sec = accts.some(function (a) { return a.section === state.ps; }) ? state.ps : accts[0].section;
     var a = accts.filter(function (x) { return x.section === sec; })[0], cur = a.portal.values || {}, maxL = a.portal.max_lots || 0.1;
@@ -1884,9 +1900,11 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     v.appendChild(el("div", { style: "margin-bottom:14px" }, [pick]));
     var rows = FIELDS.map(function (f) {
       var key = f[0], ctl;
+      var lockWhy = (a.portal.locked || {})[key];   // Best of 10 / Best of 3 (22 Nov 2026): locked until the admin unlocks it here
       if (f[2] === "bool") {
         ctl = el("input", { type: "checkbox", on: { change: function (e) { want[key] = e.target.checked; update(); } } });
         ctl.checked = !!want[key];
+        if (lockWhy && !cur[key]) { ctl.disabled = true; ctl.title = "Locked: " + lockWhy; }   // can always be switched off, never on while locked
       } else if (key === "lots") {
         var isAuto = String(want.lots) === "auto";
         var num = el("input", { type: "number", min: "0.01", max: String(maxL), step: "0.01", style: "width:7em", on: { input: function (e) { want.lots = e.target.value; update(); } } });
@@ -1900,7 +1918,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       }
       var setHere = (a.portal.set_here || []).indexOf(key) >= 0, dft = (a.portal.defaults || {})[key];
       if (key === "lots" && dft === "rule" && a.portal.defaults.lots_text) dft = { text: a.portal.defaults.lots_text };
-      return [el("strong", { text: f[3] }), ctl, el("span", { cls: "note", text: f[4] + (setHere ? " Set here (not config.ini)." : "") +
+      return [el("strong", { text: f[3] }), ctl, el("span", { cls: "note", text: (lockWhy ? "🔒 " + lockWhy.charAt(0).toUpperCase() + lockWhy.slice(1) + ". " : "") + f[4] + (setHere ? " Set here (not config.ini)." : "") +
         (dft != null && key !== "trading" ? " Default: " + portalShow(key, dft) + "." : "") })];
     });
     // one table, a heading row per group (PGROUPS), so the settings read top to bottom in the order they act
