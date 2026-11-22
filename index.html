@@ -1850,7 +1850,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close the consensus trade (and its ladder) while in profit when a voting channel posts the other way."],
     ["stop_usd", "S", "usd", "Consensus stop $", "Stop this many dollars from the entry (10 = 100 pips). Bigger = more lost at each stop. $1 – $50."],
     ["news_min", "N", "int", "News filter (min)", "No new orders (any strategy) this many minutes either side of high-impact US news. 0 = off. 0 – 120."],
-    ["cooldown_min", "C", "int", "Pause after opposite consensus (min)", "No order (consensus, ladder or Best of 10) this many minutes after a consensus the other way. 0 = off. 0 – 120."],
+    ["cooldown_min", "C", "int", "Pause after opposite consensus (min)", "No consensus or ladder order this many minutes after a consensus the other way (Best of 10 doesn’t use it). 0 = off. 0 – 120."],
     ["max_delay", "F", "int", "Order time limit (min)", "No order (any strategy) if the signal is older than this when it reaches the account. 1 – 10."],
     ["ladder_stop", "K", "usd", "Ladder stop $", "Stop this many dollars from the ladder’s entry. Bigger = more lost at each stop. $1 – $50."],
     ["max_risk", "Z", "int", "Max risk per order %", "No single order or position (any strategy) can lose more than this share of the balance at its stop: a bigger one is cut down to the largest size that fits. Can be lowered here, not raised above the admin’s cap."]];
@@ -1859,7 +1859,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   var PGROUPS = [["Account", "on/off, size and how many orders at once: shared by every strategy", ["trading", "lots", "max_open"]],
     ["Strategies", "what trades this account (Best of 10 unlocks when the admin allows it)", ["consensus", "ladder", "best10", "best10_top"]],
     ["Loss limits", "how much one order, a day or a week can lose: shared by every strategy", ["max_risk", "day_limit", "week_limit"]],
-    ["When new orders are allowed", "checked before every order, whichever strategy places it", ["news_min", "cooldown_min", "max_delay"]],
+    ["When new orders are allowed", "checked before every order, whichever strategy places it (the pause after an opposite consensus: consensus and ladder only)", ["news_min", "cooldown_min", "max_delay"]],
     ["Consensus trade", "the main order: its stop and how it can close early", ["stop_usd", "early_exit", "profit_lock", "opposite_exit"]],
     ["Ladder order", "the second, half-size order $5 better than the consensus entry", ["ladder_stop"]]];
   var PCODE = { live: "1", live2: "2", live3: "3" };
