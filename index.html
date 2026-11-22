@@ -1017,7 +1017,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var b = DATA.best3, out = [];
     if (DATA.cons_sandbox) out.push({ k: "cons", label: "Consensus, test rules (" + (DATA.cons_sandbox.server || "Sandbox demo") + ")", view: viewConsSandbox });
     if (b) out.push({ k: "best3", label: "Best of 3" + (b.paper ? " (paper)" : " (" + (b.server || "MT5 demo") + ")"), view: viewBest3One });
-    if (DATA.best10) out.push({ k: "best10", label: "Best of 10, TP1 only (" + (DATA.best10.server || "MT5 demo") + ")", view: viewBest10 });
+    if (DATA.best10) out.push({ k: "best10", label: b10Name(DATA.best10) + " (" + (DATA.best10.server || "MT5 demo") + ")", view: viewBest10 });
     if (DATA.pos2w) out.push({ k: "pos2w", label: "Positive 2 weeks, TP1 only (" + (DATA.pos2w.server || "MT5 demo") + ")", view: viewPos2w });
     if (DATA.pos2w5) out.push({ k: "pos2w5", label: "Positive 2 weeks, max 5, TP1 only (" + (DATA.pos2w5.server || "MT5 demo") + ")", view: function (v) { viewBest3One(v, DATA.pos2w5, "pos2w"); } });
     if (DATA.bandit) out.push({ k: "bandit", label: "Channel bandit (paper, self-improving)", view: viewBandit });
@@ -1025,6 +1025,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       out.push({ k: "own", label: "Own signals" + (DATA.own_sandbox ? " (" + (DATA.own_sandbox.server || "Sandbox demo") + ")" : ""), view: viewOwn });
     return out;
   }
+  // Best of 10's TPs (22 Nov 2026: tps = all in the Sandbox's best3.ini; reports without tp_cap are the TP1-only trial)
+  function b10Cap(b) { return (b && b.tp_cap) || 1; }
+  function b10Tps(b) { var c = b10Cap(b); return c >= 99 ? "every TP" : c > 1 ? "up to TP" + c : "TP1 only"; }
+  function b10Name(b) { return "Best of 10, " + b10Tps(b); }
   function viewBest3(v) {   // the Sandbox tab: strategies on trial, one at a time or compared
     var list = sandboxList();
     v.appendChild(el("p", { style: "margin:0 0 10px;max-width:80ch" }, [el("strong", { text: "Sandbox: " }),
@@ -1056,7 +1060,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         rows.push(line("Consensus, test rules", (cs.server || "Sandbox demo") + " " + (cs.account || ""), (cs.trades || []).map(function (r) { return Object.assign({ grp: "Consensus" }, r, { status: r.status === "Pending" ? "Waiting" : r.status }); }),
           cs.currency || "USD", DATA.best3 && DATA.best3.week, null, cs.lots_now + " now (" + cs.lots_rule + ")")); }
       if (x.k === "best10") { var t10 = DATA.best10;
-        rows.push(line("Best of 10, TP1 only", (t10.server || "MT5 demo") + " " + (t10.account || ""), t10.trades || [], t10.currency || "USD", t10.week, null, t10.lots + " per position")); }
+        rows.push(line(b10Name(t10), (t10.server || "MT5 demo") + " " + (t10.account || ""), t10.trades || [], t10.currency || "USD", t10.week, null, t10.lots + " per position")); }
       if (x.k === "pos2w5") { var p5 = DATA.pos2w5;
         rows.push(line("Positive 2 weeks, max 5", (p5.server || "MT5 demo") + " " + (p5.account || ""), p5.trades || [], p5.currency || "USD", p5.week, null, p5.lots + " per position")); }
       if (x.k === "pos2w") { var p2 = DATA.pos2w;
@@ -1154,9 +1158,13 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       " lots, at most " + b.max_open + " open or waiting at once (new signals are skipped, not queued, while full), its own daily loss limit " + b.day_limit +
       "%. Waiting orders are removed after 4 hours, or once the signal reached TP1 first. Results are the broker’s. Last change " + when(b.updated) + "." }));
     else if (ten) v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
-      "On trial since 17 Nov. Every Sunday 23:00 Nairobi the channels are ranked by last week’s net R on their TP1 positions only (3+ signals, positive only; re-checked at Monday close), " +
+      (b10Cap(b) > 1 ? "On trial since 22 Nov (the earlier TP1-only trial of 17–20 Nov is retired and not shown)" : "On trial since 17 Nov") + ". Every Sunday 23:00 Nairobi the channels are ranked by last week’s net R on " +
+      (b.rank_on === "all" ? "all their TPs’ positions" : "their TP1 positions only") + " (3+ signals, positive only; re-checked at Monday close), " +
       "and this week every new signal of the top ten is copied as it comes in, into the Sandbox demo" + (b.server ? " (" + b.server + ", account " + (b.account || "") + ")" : "") +
-      ": one position, TP1 only, the channel’s entry and stop, " + b.lots + " lots, at most " + b.max_open + " open or waiting at once (new signals are skipped, not queued, while full), " +
+      ": " + (b10Cap(b) >= 99 ? "one position per TP the signal lists" : b10Cap(b) > 1 ? "one position per TP, up to TP" + b10Cap(b) : "one position, TP1 only") + ", the channel’s entry and stop, " + b.lots + " lots" + (b10Cap(b) > 1 ? " each" : "") + ", " +
+      (b.max_open ? "at most " + b.max_open + " open or waiting at once (new signals are skipped, not queued, while full), " : "no limit on open or waiting positions, ") +
+      (b.be_half ? "stops of the positions still open move to breakeven once half of the signal’s TPs have hit (TP5 of 10), " : "") +
+      (b.rules_text && b.rules_text.length ? b.rules_text.join(", ") + ", " : "") +
       "its own daily loss limit " + b.day_limit + "%. Waiting orders are removed after 4 hours, or once the signal reached TP1 first. Results are the broker’s. Last change " + when(b.updated) + "." }));
     else v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
       "Every Monday the channels are ranked by last week’s net R (3+ signals, positive only)" +
@@ -1176,10 +1184,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     // since 17 Nov 2026: this week's R per channel (the tracker's scoring of its closed positions since the week began,
     // TP1 only for the TP1 strategies) next to last week's, and what this strategy made from it this week
     var wkStart = b.week ? new Date(Date.parse(b.week + "T00:00:00Z") - 4 * 3600e3).toISOString() : "";   // Sunday 23:00 Nairobi
-    var cw = {};
+    var cw = {}, tp1Only = ten && b.rank_on !== "all";   // Best of 10 ranks on all TPs since 22 Nov 2026
     (DATA.legs || []).forEach(function (l) {
       if (!wkStart || l.status !== "closed" || l.r_multiple == null || (l.posted_at || "") < wkStart) return;
-      if (ten && (l.leg || 1) !== 1) return;
+      if (tp1Only && (l.leg || 1) !== 1) return;
       var c = cw[l.grp] || (cw[l.grp] = { r: 0, n: 0, w: 0, ids: {} });
       c.r += l.r_multiple; c.n += 1; c.w += l.r_multiple > 0.05 ? 1 : 0; c.ids[l.trade_id] = 1;
     });
@@ -1188,7 +1196,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var rkIn = (b.ranking || []).map(function (r, i) { return { r: r, i: i }; }).filter(function (x) { return chanOK(x.r.grp); });
     var rk = rkIn.map(function (x) {
       var r = x.r, i = x.i, c = cw[r.grp], o = ours(r.grp);
-      return [String(i + 1), r.grp, r.cap > 1 ? "TP1–TP" + r.cap : "TP1", signed(r.net, 1) + "R", pct(Math.round(r.win * 100), 100), r.signals]
+      return [String(i + 1), r.grp, r.cap >= 99 ? "All TPs" : r.cap > 1 ? "TP1–TP" + r.cap : "TP1", signed(r.net, 1) + "R", pct(Math.round(r.win * 100), 100), r.signals]
         .concat(byScore ? [r.score == null ? "–" : signed(r.score, 1)] : [])
         .concat([c ? el("span", { cls: c.r > 0 ? "win" : c.r < 0 ? "loss" : "", text: signed(c.r, 1) + "R" }) : "–", c ? pct(c.w, c.n) : "–",
           c ? Object.keys(c.ids).length : 0, o.length ? mcell(sumP(o)) : "–", o.length]);
@@ -1198,8 +1206,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var head = ["#", "Channel", "Copies", "Last wk R", "Last wk win", "Last wk sig."].concat(byScore ? ["Score"] : [])
       .concat(["This wk R", "This wk win", "This wk sig.", "Our net", "Our trades", "Note"]);
     var off = byScore ? 1 : 0;
-    v.appendChild(block("This week’s channels", "Week of " + (b.week || "–") + (b.reranked ? ", re-checked at Monday close on last week + Monday." : ", " + (ten === "pos2w" ? "every channel positive on TP1 over the last 14 days (Last week columns: those 14 days)." : "ranked by last week’s results" + (ten ? " on TP1." : "."))) +
-      " “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi" + (ten ? " (TP1 only)" : " (all its TPs, as the ranking counts them)") + (byScore ? "; Score = last week’s R × win rate (the ranking)" : "") + "; “Our” = this strategy’s own closed positions from that channel this week." +
+    v.appendChild(block("This week’s channels", "Week of " + (b.week || "–") + (b.reranked ? ", re-checked at Monday close on last week + Monday." : ", " + (ten === "pos2w" ? "every channel positive on TP1 over the last 14 days (Last week columns: those 14 days)." : "ranked by last week’s results" + (tp1Only ? " on TP1." : "."))) +
+      " “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi" + (tp1Only ? " (TP1 only)" : " (all its TPs, as the ranking counts them)") + (byScore ? "; Score = last week’s R × win rate (the ranking)" : "") + "; “Our” = this strategy’s own closed positions from that channel this week." +
       (b.pause ? " Mid-week check: a channel under " + Math.round(b.pause.below * 100) + "% wins this week after " + b.pause.after + "+ closed " + (b.pause.on === "tp1" ? "TP1 " : "") + "positions is paused (not copied, tracked as if trading) until it is back at " + Math.round(b.pause.back * 100) + "%; the Note says when." : ""),
       rk.length ? table(head, rk, { num: [3, 4, 5].concat(byScore ? [6] : []).concat([6 + off, 7 + off, 8 + off, 9 + off, 10 + off]), wrap: [11 + off] })
       : empty(fx().chans && (b.ranking || []).length ? "None of the chosen channels is in this week’s list." : "No channel qualified last week (3+ signals and a positive net R).")));
