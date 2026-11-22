@@ -115,6 +115,8 @@ ol.board button:focus-visible { outline: 2px solid var(--gold); outline-offset: 
 .facts { color: var(--muted); font-size: 13px; }
 .badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 12px; font-weight: 600;
   background: var(--loss-soft); color: var(--loss); vertical-align: 1px; }
+.badge.new { background: var(--gold-soft); color: var(--gold-strong); }
+.badge.folder { background: var(--chip); color: var(--muted); }
 .dbar { position: relative; height: 14px; }
 .dbar::before { content: ""; position: absolute; left: 50%; top: -5px; bottom: -5px; border-left: 1px solid var(--muted); opacity: .45; }
 .dbar span { position: absolute; top: 0; height: 100%; border-radius: 2px; }
@@ -1193,21 +1195,57 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     });
     var ours = function (g) { return done.filter(function (x) { return x.grp === g && (x.at || "") >= wkStart; }); };
     var byScore = (b.ranking || []).some(function (r) { return r.score != null && Math.abs(r.score - r.net) > 0.001; });
-    var rkIn = (b.ranking || []).map(function (r, i) { return { r: r, i: i }; }).filter(function (x) { return chanOK(x.r.grp); });
+    // stand-ins (22 Nov 2026): a ranked channel blacklisted by the channel rules is not copied; the next best takes its
+    // place (the Sandbox's best3.effective_ranking). Shown under the ranked ten, each with whom it stands in for.
+    var replaced = b.replaced || [], standins = b.standins || [];
+    var rkAll = (b.ranking || []).map(function (r, i) { return { r: r, i: i }; })
+      .concat(standins.map(function (r, j) { return { r: r, i: (b.ranking || []).length + j, sub: replaced[j] || "" }; }));
+    var rkIn = rkAll.filter(function (x) { return chanOK(x.r.grp); });
+    // since 22 Nov 2026: each channel's status (muted / blacklisted by the channel rules: not copied; in the Telegram
+    // Blacklist folder: still copied) and the channels new to the list (vs last week's final list, or Monday's re-check)
+    var CS = DATA.chan_status || {}, hs = (b.history || []).slice().sort(function (p, q) { return p.week < q.week ? -1 : p.week > q.week ? 1 : 0; });
+    var hNow = hs.filter(function (h) { return h.week === b.week; }).pop(), hPrev = hs.filter(function (h) { return b.week && h.week < b.week; }).pop();
+    var prevList = hPrev ? (hPrev.changed || hPrev.monday_channels || hPrev.channels || []) : null, sunList = hNow ? (hNow.channels || []) : null;
+    var newNote = function (g) {
+      var mon = b.reranked && sunList && sunList.indexOf(g) < 0;
+      if (prevList) return prevList.indexOf(g) >= 0 ? "" : mon ? "New this week (came in at the Monday re-check)" : "New this week";
+      return mon ? "New at the Monday re-check" : "";
+    };
+    var statusOf = function (g) {
+      var st = CS[g];
+      if (!st) return null;
+      var why = String(st.why || "").replace(/^(blacklisted|muted):\s*/i, "");
+      if (st.status === "blacklisted") return { badge: "Blacklisted", cls: "badge", note: "Blacklisted, not copied: " + why };
+      if (st.status === "muted") return { badge: "Muted", cls: "badge", note: "Muted for 24 h, not copied: " + why };
+      return { badge: st.folder || "Blacklist", cls: "badge folder", note: "In the " + (st.folder || "Blacklist") + " folder (still copied): " + why };
+    };
+    var chanCell = function (g) {
+      var st = statusOf(g), nw = newNote(g);
+      if (!st && !nw) return g;
+      return el("span", null, [document.createTextNode(g), nw ? el("span", { cls: "badge new", title: nw, text: "New" }) : null,
+        st ? el("span", { cls: st.cls, title: st.note, text: st.badge }) : null].filter(Boolean));
+    };
     var rk = rkIn.map(function (x) {
       var r = x.r, i = x.i, c = cw[r.grp], o = ours(r.grp);
-      return [String(i + 1), r.grp, r.cap >= 99 ? "All TPs" : r.cap > 1 ? "TP1–TP" + r.cap : "TP1", signed(r.net, 1) + "R", pct(Math.round(r.win * 100), 100), r.signals]
+      return [x.sub != null ? "S" + (i + 1 - (b.ranking || []).length) : String(i + 1), chanCell(r.grp), r.cap >= 99 ? "All TPs" : r.cap > 1 ? "TP1–TP" + r.cap : "TP1", signed(r.net, 1) + "R", pct(Math.round(r.win * 100), 100), r.signals]
         .concat(byScore ? [r.score == null ? "–" : signed(r.score, 1)] : [])
         .concat([c ? el("span", { cls: c.r > 0 ? "win" : c.r < 0 ? "loss" : "", text: signed(c.r, 1) + "R" }) : "–", c ? pct(c.w, c.n) : "–",
           c ? Object.keys(c.ids).length : 0, o.length ? mcell(sumP(o)) : "–", o.length]);
     });
     var pnote = pauseNotes(b.pause_log, b.week);
-    rk.forEach(function (row, i) { row.push(pnote[rkIn[i].r.grp] || ""); });
+    rk.forEach(function (row, i) {
+      var x = rkIn[i], g = x.r.grp, st = statusOf(g);
+      var sub = x.sub != null ? "Stand-in" + (x.sub ? " for " + x.sub : "") + ": copied this week in its place" : "";
+      var out = replaced.indexOf(g) >= 0 ? "Not copied this week (blacklisted when the week started)" + (standins[replaced.indexOf(g)] ? "; " + standins[replaced.indexOf(g)].grp + " copied instead" : "") : "";
+      row.push([sub, out, newNote(g), st ? (out ? st.note.replace(/^Blacklisted, not copied: (.)/, function (m, c) { return c.toUpperCase(); }) : st.note) : "", pnote[g] || ""].filter(Boolean).join(". "));
+    });
     var head = ["#", "Channel", "Copies", "Last wk R", "Last wk win", "Last wk sig."].concat(byScore ? ["Score"] : [])
       .concat(["This wk R", "This wk win", "This wk sig.", "Our net", "Our trades", "Note"]);
     var off = byScore ? 1 : 0;
     v.appendChild(block("This week’s channels", "Week of " + (b.week || "–") + (b.reranked ? ", re-checked at Monday close on last week + Monday." : ", " + (ten === "pos2w" ? "every channel positive on TP1 over the last 14 days (Last week columns: those 14 days)." : "ranked by last week’s results" + (tp1Only ? " on TP1." : "."))) +
       " “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi" + (tp1Only ? " (TP1 only)" : " (all its TPs, as the ranking counts them)") + (byScore ? "; Score = last week’s R × win rate (the ranking)" : "") + "; “Our” = this strategy’s own closed positions from that channel this week." +
+      (standins.length ? " S1, S2 …: stand-ins, the next best channels, copied in place of ranked ones the channel rules blacklisted." : "") +
+      " Note: New = not in last week’s final list (or added at the Monday re-check); Blacklisted / Muted = the channel rules (deleted traded signals), not copied; Blacklist folder = losing, a copy or quiet, still copied." +
       (b.pause ? " Mid-week check: a channel under " + Math.round(b.pause.below * 100) + "% wins this week after " + b.pause.after + "+ closed " + (b.pause.on === "tp1" ? "TP1 " : "") + "positions is paused (not copied, tracked as if trading) until it is back at " + Math.round(b.pause.back * 100) + "%; the Note says when." : ""),
       rk.length ? table(head, rk, { num: [3, 4, 5].concat(byScore ? [6] : []).concat([6 + off, 7 + off, 8 + off, 9 + off, 10 + off]), wrap: [11 + off] })
       : empty(fx().chans && (b.ranking || []).length ? "None of the chosen channels is in this week’s list." : "No channel qualified last week (3+ signals and a positive net R).")));
@@ -1837,7 +1875,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   }
   // ---------- Settings (owner portal, since 21 Nov): each owner changes their own live account, confirmed in Telegram ----------
   var PFIELDS = [["trading", "T", "bool", "Trading", "New orders on, or paused, for every strategy on the account (open trades keep their stop and target)."],
-    ["lots", "L", "lots", "Lots", "Auto (0.01 per $1,000 of balance, at least 0.01) or a fixed size: every consensus order and every Best of 10 position."],
+    ["lots", "L", "lots", "Lots", "Consensus and ladder orders: auto (0.01 below $2,000 of balance, then 0.01 per $1,000) or a fixed size. Best of 10 has its own size (Strategies below)."],
     ["day_limit", "D", "int", "Daily loss limit %", "No new orders from any strategy once the day’s loss (closed + open, all strategies) reaches this. 5 – 50."],
     ["week_limit", "W", "int", "Weekly loss limit %", "0 = off. No new order from any strategy if the week could lose more than this. 0 – 80."],
     ["max_open", "M", "int", "Max open trades", "Open plus waiting orders at once, every strategy together (a Best of 10 signal opens one position per TP, as many as fit). 1 – 20."],
@@ -1845,6 +1883,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["ladder", "R", "bool", "Ladder orders", "A second, half-size order $5 better than the consensus entry (needs consensus orders on)."],
     ["best10", "B", "bool", "Best of 10, every TP", "Copy every TP of each new signal from last week’s best channels (how many: the next row), breakeven once half the TPs hit. Locked until the admin unlocks it for this account."],
     ["best10_top", "H", "int", "Channels to copy", "How many of last week’s best channels Best of 10 copies (3 = the old Best of 3’s pick). A change re-ranks the week at once. 1 – 10."],
+    ["best10_lots", "J", "lots", "Best of 10 lots", "Size of EACH Best of 10 position: auto (0.01 below $2,000 of balance, then 0.01 per $1,000) or a fixed size. A signal opens one position per TP, so a 10-TP signal at 0.01 lots risks about $100 at the $10 stops."],
     ["early_exit", "E", "bool", "Early exit", "Close at −$5 if price rushes against the trade within 2 minutes."],
     ["profit_lock", "P", "bool", "Profit lock", "Once +$4 in profit, the stop moves to +$2."],
     ["opposite_exit", "O", "bool", "Opposite-signal exit", "Close the consensus trade (and its ladder) while in profit when a voting channel posts the other way."],
@@ -1857,7 +1896,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   // the Settings tab shows them in these groups (portal.py GROUPS, the same order in Telegram's /settings)
   // (22 Nov 2026) Account, Loss limits and When new orders are allowed are the ACCOUNT's: shared by every strategy ticked
   var PGROUPS = [["Account", "on/off, size and how many orders at once: shared by every strategy", ["trading", "lots", "max_open"]],
-    ["Strategies", "what trades this account (Best of 10 unlocks when the admin allows it)", ["consensus", "ladder", "best10", "best10_top"]],
+    ["Strategies", "what trades this account (Best of 10 unlocks when the admin allows it)", ["consensus", "ladder", "best10", "best10_top", "best10_lots"]],
     ["Loss limits", "how much one order, a day or a week can lose: shared by every strategy", ["max_risk", "day_limit", "week_limit"]],
     ["When new orders are allowed", "checked before every order, whichever strategy places it (the pause after an opposite consensus: consensus and ladder only)", ["news_min", "cooldown_min", "max_delay"]],
     ["Consensus trade", "the main order: its stop and how it can close early", ["stop_usd", "early_exit", "profit_lock", "opposite_exit"]],
@@ -1866,7 +1905,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function portalShow(key, x) {   // a setting's value in words (the defaults note)
     if (x && x.text) return x.text;
     if (x === true || x === false) return key === "trading" ? (x ? "on" : "paused") : (x ? "on" : "off");
-    if (key === "lots") return x === "auto" ? "auto" : x === "rule" ? "config.ini’s lot rule" : String(+x);
+    if (key === "lots" || key === "best10_lots") return x === "auto" ? "auto" : x === "rule" ? "config.ini’s lot rule" : String(+x);
     if (key === "stop_usd" || key === "ladder_stop") return "$" + (+x);
     if ((key === "week_limit" || key === "news_min" || key === "cooldown_min" || key === "max_risk") && !+x) return "off";
     if (key === "day_limit" || key === "week_limit" || key === "max_risk") return (+x) + "%";
@@ -1878,7 +1917,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     PFIELDS.forEach(function (f) {
       if (!(f[0] in vals)) return;
       var x = vals[f[0]];
-      parts.push(f[1] + (f[2] === "bool" ? (x ? "1" : "0") : f[0] === "lots" ? (x === "auto" ? "a" : String(+x).replace(".", "p")) :
+      parts.push(f[1] + (f[2] === "bool" ? (x ? "1" : "0") : f[2] === "lots" ? (x === "auto" ? "a" : String(+x).replace(".", "p")) :
         f[2] === "usd" ? String(Math.round(+x * 100) / 100).replace(".", "p") : String(Math.round(+x))));
     });
     var out = parts.join("_");   // Telegram allows 64 characters: a long one drops the underscores (portal.encode does the same)
@@ -1905,11 +1944,11 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         ctl = el("input", { type: "checkbox", on: { change: function (e) { want[key] = e.target.checked; update(); } } });
         ctl.checked = !!want[key];
         if (lockWhy && !cur[key]) { ctl.disabled = true; ctl.title = "Locked: " + lockWhy; }   // can always be switched off, never on while locked
-      } else if (key === "lots") {
-        var isAuto = String(want.lots) === "auto";
-        var num = el("input", { type: "number", min: "0.01", max: String(maxL), step: "0.01", style: "width:7em", on: { input: function (e) { want.lots = e.target.value; update(); } } });
-        num.value = isAuto ? "" : String(want.lots || ""); num.disabled = isAuto;
-        var auto = el("input", { type: "checkbox", on: { change: function (e) { want.lots = e.target.checked ? "auto" : (num.value || String(Math.min(0.01, maxL))); num.disabled = e.target.checked; if (!e.target.checked && !num.value) num.value = want.lots; update(); } } });
+      } else if (f[2] === "lots") {   // Lots, and Best of 10 lots (its own size since 22 Nov 2026)
+        var isAuto = String(want[key]) === "auto";
+        var num = el("input", { type: "number", min: "0.01", max: String(maxL), step: "0.01", style: "width:7em", on: { input: function (e) { want[key] = e.target.value; update(); } } });
+        num.value = isAuto ? "" : String(want[key] || ""); num.disabled = isAuto;
+        var auto = el("input", { type: "checkbox", on: { change: function (e) { want[key] = e.target.checked ? "auto" : (num.value || String(Math.min(0.01, maxL))); num.disabled = e.target.checked; if (!e.target.checked && !num.value) num.value = want[key]; update(); } } });
         auto.checked = isAuto;
         ctl = el("span", null, [el("label", null, [auto, " auto"]), " or ", num, el("span", { cls: "note", text: " lots (max " + maxL + ")" })]);
       } else {
@@ -1942,14 +1981,16 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       return FIELDS.filter(function (f) { var k = f[0];
         if (f[2] === "bool") return !!want[k] !== !!cur[k];
         if (k === "lots") return String(want.lots) !== String(cur.lots) || cur.lots_rule && String(want.lots) !== String(cur.lots);
+        if (f[2] === "lots") return String(want[k]) !== String(cur[k]);
         return +want[k] !== +cur[k]; }).map(function (f) { return f[0]; });
     };
     function update() {
       var ch = changedKeys(), bad = [];
       if (ch.indexOf("lots") >= 0 && want.lots !== "auto" && !(+want.lots >= 0.01 && +want.lots <= maxL)) bad.push("Lots must be 0.01 – " + maxL + ".");
+      if (ch.indexOf("best10_lots") >= 0 && want.best10_lots !== "auto" && !(+want.best10_lots >= 0.01 && +want.best10_lots <= maxL)) bad.push("Best of 10 lots must be 0.01 – " + maxL + ".");
       if (!(+want.day_limit >= 5 && +want.day_limit <= 50)) bad.push("Daily loss limit must be 5 – 50.");
       if (!(+want.week_limit >= 0 && +want.week_limit <= 80)) bad.push("Weekly loss limit must be 0 – 80.");
-      if (!(+want.max_open >= 1 && +want.max_open <= 5)) bad.push("Max open trades must be 1 – 5.");
+      if (!(+want.max_open >= 1 && +want.max_open <= 20)) bad.push("Max open trades must be 1 – 20.");
       if (ch.indexOf("stop_usd") >= 0 && !(+want.stop_usd >= 1 && +want.stop_usd <= 50)) bad.push("Consensus stop must be $1 – $50.");
       if (ch.indexOf("news_min") >= 0 && !(+want.news_min >= 0 && +want.news_min <= 120)) bad.push("News filter must be 0 – 120 min.");
       if (ch.indexOf("cooldown_min") >= 0 && !(+want.cooldown_min >= 0 && +want.cooldown_min <= 120)) bad.push("Pause after opposite consensus must be 0 – 120 min.");
