@@ -1393,20 +1393,58 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         n.length ? who + ": " + n.length + " ticked: " + n.join(", ") + ". Telegram opens with them; tap Start, then Apply." :
         who + ": nothing ticked, applying goes back to last week’s ranking. Telegram opens; tap Start, then Apply.";
     }
-    var body = rows.map(function (r) {
+    // (23 Nov 2026, Arnold: "Table needs more columns. We had win rate | score | Note columns. Ranking to use score so as
+    // to match criteria for best of 10. We still maintain the list of Top 50"): the same top 50, ordered by Best of 10's
+    // score on its ranking basis (the Sandbox's numbers for every channel: last week, or last week + Monday after the
+    // Monday-close check); channels that would qualify (3+ signals, positive, at or above the win floor) first
+    var B = DATA.best10 || {}, SC = B.scores || {}, minWin = +B.min_win || 0, minSig = +B.min_signals || 3;
+    var ranked = (B.ranking || []).map(function (r) { return r.grp; }), stand = (B.standins || []).map(function (r) { return r.grp; });
+    var pzd = {};
+    (B.pause_log || []).forEach(function (e) { if (!B.week || e.week === B.week) { if (e.event === "back") delete pzd[e.grp]; else pzd[e.grp] = e; } });
+    var fits = function (x) { return !!x && x.signals >= minSig && x.net > 0 && x.win >= minWin - 1e-9; };
+    // this week so far (23 Nov 2026, "More columns missed: Current week results - win rate, signals, etc"): the tracker's
+    // scoring of each channel's closed positions (every TP) since Sunday 23:00 Nairobi, as in "This week's channels"
+    var wkStart = B.week ? new Date(Date.parse(B.week + "T00:00:00Z") - 4 * 3600e3).toISOString() : "", cw = {};
+    (DATA.legs || []).forEach(function (l) {
+      if (!wkStart || l.status !== "closed" || l.r_multiple == null || (l.posted_at || "") < wkStart) return;
+      var c = cw[l.grp] || (cw[l.grp] = { r: 0, n: 0, w: 0, ids: {} });
+      c.r += l.r_multiple; c.n += 1; c.w += l.r_multiple > 0.05 ? 1 : 0; c.ids[l.trade_id] = 1;
+    });
+    var shown = rows.map(function (r) { var x = SC[r.grp] || null; return { r: r, x: x, ok: fits(x) }; }).sort(function (p, q) {
+      if (p.ok !== q.ok) return p.ok ? -1 : 1;
+      if (!!p.x !== !!q.x) return p.x ? -1 : 1;
+      if (p.x && q.x && p.x.score !== q.x.score) return q.x.score - p.x.score;
+      return p.r.rank - q.r.rank;
+    });
+    var noteOf = function (g, x, ok) {
+      var out = [], k = ranked.indexOf(g), st = statusOf(g);
+      if (k >= 0) out.push("In the Sandbox’s Best of 10 this week (#" + (k + 1) + ")" + ((B.replaced || []).indexOf(g) >= 0 ? ", out for now" : ""));
+      if (stand.indexOf(g) >= 0) out.push("Stand-in on the Sandbox this week");
+      if (pzd[g]) out.push("Paused by the mid-week check (" + Math.round((pzd[g].win || 0) * 100) + "% of " + pzd[g].n + ")");
+      if (st) out.push(st.note.replace(", not copied:", " (copied anyway if ticked):").replace(/ \(still copied\)/, ""));
+      if (!x) out.push("No closed signals " + (B.scores_basis || "last week"));
+      else if (!ok) out.push(x.signals < minSig ? "Only " + x.signals + " signal" + (x.signals === 1 ? "" : "s") + " (the ranking needs " + minSig + ")" :
+        x.net <= 0 ? "Negative " + (B.scores_basis || "last week") : "Win rate under the " + Math.round(minWin * 100) + "% floor");
+      return out.join(". ");
+    };
+    var body = shown.map(function (it, n) {
+      var r = it.r, x = it.x;
       var cb = el("input", { type: "checkbox", "aria-label": "Copy " + r.grp, on: { change: function (e) { if (e.target.checked) want[r.grp] = 1; else delete want[r.grp]; update(); } } });
       cb.checked = !!want[r.grp];
-      boxes.push(cb);
+      boxes.push({ cb: cb, grp: r.grp });
       var st = statusOf(r.grp);
       var name = st ? el("span", null, [document.createTextNode(r.grp), el("span", { cls: st.cls, title: st.note.replace(", not copied", ": copied anyway if ticked"), text: st.badge })]) : r.grp;
-      return [cb, String(r.rank), name, r.net == null ? "–" : el("span", { cls: r.net > 0 ? "win" : r.net < 0 ? "loss" : "", text: signed(r.net, 1) + "R" }),
-        r.signals == null ? "–" : r.signals, r.votes ? "Yes" : "No"];
+      var rc = function (v) { return v == null ? "–" : el("span", { cls: v > 0 ? "win" : v < 0 ? "loss" : "", text: signed(v, 1) + "R" }); };
+      var c = cw[r.grp];
+      return [cb, String(n + 1), name, x ? rc(x.net) : "–", x ? pct(Math.round(x.win * 100), 100) : "–", x ? x.signals : "–",
+        x ? signed(x.score, 1) : "–", c ? rc(c.r) : "–", c ? pct(c.w, c.n) : "–", c ? Object.keys(c.ids).length : 0,
+        rc(r.net), r.votes ? "Yes" : "No", noteOf(r.grp, x, it.ok)];
     });
     apply.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=" + mask(want), "_blank"); });
     back.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=" + mask({}), "_blank"); });
-    none.addEventListener("click", function () { want = {}; boxes.forEach(function (cb) { cb.checked = false; }); update(); });
+    none.addEventListener("click", function () { want = {}; boxes.forEach(function (b) { b.cb.checked = false; }); update(); });
     reset.addEventListener("click", function () { want = {}; cur.forEach(function (g) { want[g] = 1; });
-      boxes.forEach(function (cb, i) { cb.checked = !!want[rows[i].grp]; }); update(); });
+      boxes.forEach(function (b) { b.cb.checked = !!want[b.grp]; }); update(); });
     var now = cur.length ? "Picked now: " + cur.length + " channel" + (cur.length > 1 ? "s" : "") + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") + "." :
       "Nothing picked now: Best of 10 copies last week’s best channels.";
     var panel = el("div", { cls: "panel", style: "margin-bottom:10px" }, [apply, back, none, reset, msg,
@@ -1415,10 +1453,12 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : "Only the admin or a linked account owner can confirm in Telegram. Live accounts pick their own on the Settings tab." })]);
     update();
     return block(tgt ? "Best of 10: pick channels for " + tgt.label + " (this week’s top 50)" : "Pick channels to copy (this week’s top 50)",
-      "The consensus ranking’s top 50 (net R over the last " + (T.days || 28) + " days, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "). " +
+      "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "), ordered by Best of 10’s score: net R × win rate on every TP, " + (B.scores_basis || "last week") +
+      (SC && Object.keys(SC).length ? "" : " (not worked out yet: the Sandbox shows it after its next pass)") + "; “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi. Channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") come first. " +
       "Tick the channels Best of 10 should copy " + (tgt ? "on " + tgt.label : "on the Sandbox") + " and press “Apply in Telegram”: from then on only the ticked channels are copied, whatever their ranking, the channel rules (Blacklisted / Muted) or the mid-week pause. " +
       "“Back to the ranking” clears the picks. " + now,
-      el("div", null, [panel, table(["Copy", "#", "Channel", "Net R", "Signals", "Votes"], body, { num: [1, 3, 4] })]));   // the buttons above the 50 rows
+      el("div", null, [panel, table(["Copy", "#", "Channel", "Last wk R", "Last wk win", "Last wk sig.", "Score", "This wk R", "This wk win", "This wk sig.", "28-day R", "Votes", "Note"], body,
+        { num: [1, 3, 4, 5, 6, 7, 8, 9, 10], wrap: [12] })]));   // the buttons above the 50 rows
   }
   function b3BackfillNote() {   // why "Include backfill" doesn't change this tab
     return el("p", { cls: "note", style: "margin-bottom:12px;max-width:80ch", text:
