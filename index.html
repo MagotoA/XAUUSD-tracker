@@ -995,6 +995,36 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var who = ((s.meta && s.meta.supporters) || []).map(function (x) { return x.grp; }).join(", ");
       return [dateOnly(s.posted_at), timeOnly(s.posted_at), sideCell(s), s.entry, s.sl_initial, s.tp_text || "", who, resultOf(s), ladCell(s)];
     }), { wrap: [6, 7, 8] }) : empty(fx().any || sg ? "No consensus signals match the filters above." : "No consensus signals yet" + (state.bf ? "." : ". Tick Include backfill to see consensus from the backfilled weeks."))));
+    // score all (23 Nov 2026, Arnold: "it is crucial to take all trades so as to measure profitability properly"): each
+    // consensus the accounts didn't trade, scored by the tracker as if it had gone in at market when it formed (asif.py)
+    var asIf = CSIGS.filter(function (t) {
+      return t.grp !== LAD && skipped(t) && t.meta && t.meta.as_if && t.meta.as_if.status && t.meta.as_if.status !== "no price" &&
+        inPeriod(tOf(t, "posted_at")) && chanOK(supporters(t.id)) && sideOK(t.side) && sg !== "ladder";
+    }).sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : -1; });
+    if (asIf.length) {
+      var aiDone = asIf.filter(function (t) { return t.meta.as_if.pnl != null; }), aiWins = aiDone.filter(function (t) { return t.meta.as_if.pnl > 0; }).length;
+      var aiUsd = sum(aiDone.map(function (t) { return t.meta.as_if.pnl; })), aiR = sum(aiDone.map(function (t) { return t.meta.as_if.r || 0; }));
+      var tradedC = rows.filter(function (t) { return t.status === "closed" && t.source !== "backfill" && t.posted_at >= "2026-11-16"; });
+      var trUsd = sum(tradedC.map(function (t) { return t.pnl_usd || 0; })), trR = sum(tradedC.map(function (t) { return t.r_multiple || 0; }));
+      var trW = tradedC.filter(function (t) { return t.result === "win"; }).length;
+      var usd = function (x) { return (x > 0 ? "+$" : x < 0 ? "−$" : "$") + Math.abs(x).toFixed(2); };
+      v.appendChild(block("Not traded, scored as if traded", "Consensus signals the accounts didn’t take (price already more than $3 past the channels’ entry, no play left, the cooldown after an opposite consensus, the news filter, max open ...), scored by the tracker as if each had gone in at market when it formed: that price, the $10 stop and the consensus TP (at least $5). No profit lock, early or opposite exit. Kept apart from the real results above; dollars per 0.01 lot.",
+        el("div", null, [
+          el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [
+            ["Not traded", asIf.length], ["Closed (as if)", aiDone.length], ["Win rate (as if)", pct(aiWins, aiDone.length)],
+            ["Net (as if, 0.01 lots)", aiDone.length ? usd(aiUsd) : "–"],
+            ["All consensus since 16 Nov", (tradedC.length + aiDone.length) + " closed, " + pct(trW + aiWins, tradedC.length + aiDone.length) + " wins"],
+            ["All consensus net (0.01 lots)", usd(trUsd + aiUsd) + " (" + signed(trR + aiR, 1) + "R)"]].map(function (k) {
+            return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })),
+          table(["Posted date", "Posted time", "Side", "Why not traded", "Entry (as if)", "SL", "TP", "Result", "$ (0.01 lots)", "R"],
+            asIf.map(function (t) {
+              var a = t.meta.as_if, who = (t.exit_reason || "").replace(/^not traded:\s*/, "");
+              return [dateOnly(t.posted_at), timeOnly(t.posted_at), sideCell(t), who, a.entry == null ? "–" : a.entry, a.sl, a.tp,
+                a.status === "win" ? "Win (TP)" : a.status === "loss" ? "Loss (stop)" : a.status === "open" ? "Open" : "Expired",
+                a.pnl == null ? "–" : el("span", { cls: a.pnl > 0 ? "win" : a.pnl < 0 ? "loss" : "", text: usd(a.pnl) }), a.r == null ? "–" : signed(a.r, 2)];
+            }), { num: [4, 5, 6, 8, 9], wrap: [3] })
+        ])));
+    }
     var log = both.slice().sort(function (a, b) { return a.posted_at < b.posted_at ? 1 : a.posted_at > b.posted_at ? -1 : (a.leg || 0) - (b.leg || 0); });
     var dl = el("button", { cls: "action", text: "Download CSV", on: { click: function () {
       var data = [HCOLS].concat(log.map(function (t) { return hRow(t, true); }));
