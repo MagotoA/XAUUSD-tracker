@@ -137,6 +137,11 @@ ol.board button:focus-visible { outline: 2px solid var(--gold); outline-offset: 
 .seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
 .segb { font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 16px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); cursor: pointer; }
 .segb.on { background: var(--gold-soft); border-color: var(--gold); color: var(--gold-strong); font-weight: 600; }
+/* a picked channel's sessions (23 Nov 2026) */
+.sesb { font: inherit; font-size: 12px; padding: 1px 6px; margin: 0 3px 3px 0; border-radius: 10px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.sesb.on { background: var(--gold-soft); border-color: var(--gold); color: var(--ink); font-weight: 600; }
+.sesb:disabled { cursor: default; opacity: .55; }
+.sesb .win, .sesb .loss { font-weight: 600; }
 .bars .row { display: grid; grid-template-columns: minmax(96px, 150px) 1fr 76px; gap: 10px; align-items: center; font-size: 14px; }
 .bars .lab { overflow-wrap: anywhere; } .bars .lab small { color: var(--muted); display: block; font-size: 12px; }
 .bars .track { position: relative; height: 12px; background: var(--chip); border-radius: 3px; }
@@ -1317,7 +1322,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       // and paused by the mid-week check (23 Nov 2026, "Yes"): why each replaced channel is out (the Sandbox's report)
       var whyOut = function (n) { var k = (b.replaced_why || {})[n] || ((CS[n] || {}).status === "muted" ? "muted" : pausedNow[n] && !(CS[n] || {}).status ? "paused" : "blacklisted");
         return k === "muted" ? "muted (24 h)" : k === "paused" ? "paused by the mid-week check" : "blacklisted"; };
-      var sub = x.pick ? "Picked by hand: copied whatever its ranking or the channel rules" :
+      var sub = x.pick ? "Picked by hand: copied whatever its ranking or the channel rules" + ((b.picked_sessions || {})[g] ? ", only in " + b.picked_sessions[g].join(", ") + " (London time)" : "") + ((b.picked_sides || {})[g] ? ", " + b.picked_sides[g] + "s only" : "") :
         x.sub != null ? "Stand-in" + (x.sub ? " for " + x.sub + ": copied in its place while it is " + whyOut(x.sub) : ": copied in the place of a channel that is out") : "";
       var out = replaced.indexOf(g) >= 0 ? "Not copied while " + whyOut(g) + (standins[replaced.indexOf(g)] ? "; " + standins[replaced.indexOf(g)].grp + " copied instead, until it is back" : "") : "";
       // a channel paused now: its win rate this week so far next to the one it was paused at (23 Nov 2026)
@@ -1370,9 +1375,12 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   // linked account owner taps Apply, and the Sandbox copies only those channels from its next pass.
   // the ticks not sent yet survive the page's automatic refresh (this tab only; per list: the Sandbox or a live
   // account; dropped when the top 50 changes)
+  var PCODES = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL";   // picks.CODES: side * 16 + session bits
+  var SESS = ["Asia", "London", "London + New York", "New York"], SESS_SHORT = { "Asia": "Asia", "London": "Lon", "London + New York": "Lon+NY", "New York": "NY" };
+  var SESS_NBO = { "Asia": " 22:00–07:00, Nairobi 01:00–10:00", "London": " 07:00–12:00, Nairobi 10:00–15:00", "London + New York": " 12:00–17:00, Nairobi 15:00–20:00", "New York": " 17:00–22:00, Nairobi 20:00–01:00" };
   var PICK50 = (function () { try { var x = JSON.parse(sessionStorage.getItem("gst_pick50") || "null"); return x && !x.fp ? x : {}; } catch (e) { return {}; } })();
-  function savePick50(key, fp, want) {
-    if (want) PICK50[key] = { fp: fp, ticks: Object.keys(want) }; else delete PICK50[key];
+  function savePick50(key, fp, want, sess, sides) {
+    if (want) PICK50[key] = { fp: fp, ticks: Object.keys(want), sess: sess || {}, sides: sides || {} }; else delete PICK50[key];
     try { sessionStorage.setItem("gst_pick50", JSON.stringify(PICK50)); } catch (e) {}
   }
   function chanStatus(g) {   // the channel rules' status of a channel, for the picker's badges (as the Sandbox tab's)
@@ -1391,17 +1399,37 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var by = tgt ? tgt.changed_by : T.changed_by, at = tgt ? tgt.changed_at : T.changed_at;
     var draft = PICK50[key] && PICK50[key].fp === T.fp ? PICK50[key].ticks : null;
     (draft || cur).forEach(function (g) { want[g] = 1; });
+    // the sessions each picked channel is copied in (23 Nov 2026, Arnold: "decide which session should the channels be
+    // used in"): bits 1 Asia, 2 London, 4 London + New York, 8 New York (London time); 15 = every session (the default)
+    var curSess = {}, curS = (tgt ? tgt.sessions : T.sessions) || {};
+    Object.keys(curS).forEach(function (g) { var b = 0; (curS[g] || []).forEach(function (x) { var k = SESS.indexOf(x); if (k >= 0) b |= 1 << k; }); curSess[g] = b; });
+    var wantS = {}, dS = draft ? (PICK50[key].sess || {}) : curSess;
+    Object.keys(dS).forEach(function (g) { wantS[g] = dS[g]; });
+    var bitsOf = function (g) { return g in wantS ? wantS[g] & 15 : 15; };
+    // ... and buys or sells only (23 Nov 2026, Arnold: "a filter that also targets the channel for buys or sells only")
+    var curSide = {}, wantD = {};
+    Object.keys((tgt ? tgt.sides : T.sides) || {}).forEach(function (g) { var v = ((tgt ? tgt.sides : T.sides) || {})[g]; if (v === "buy" || v === "sell") curSide[g] = v; });
+    var dD = draft ? (PICK50[key].sides || {}) : curSide;
+    Object.keys(dD).forEach(function (g) { wantD[g] = dD[g]; });
+    var sideOf = function (g) { return wantD[g] || ""; };
     var gone = cur.filter(function (g) { return !rows.some(function (r) { return r.grp === g; }); });
     var mask = function (ticked) {
       var bytes = []; for (var i = 0; i < Math.ceil(rows.length / 8); i++) bytes.push(0);
-      rows.forEach(function (r, i) { if (ticked[r.grp]) bytes[i >> 3] |= 1 << (i & 7); });
-      return (tgt ? "q" + PCODE[tgt.sec] : "p") + T.fp + "_" + btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      var digits = "";
+      rows.forEach(function (r, i) { if (ticked[r.grp]) { bytes[i >> 3] |= 1 << (i & 7); digits += PCODES.charAt((sideOf(r.grp) === "buy" ? 16 : sideOf(r.grp) === "sell" ? 32 : 0) + bitsOf(r.grp)); } });
+      var m = btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      if (/[^f]/.test(digits)) return (tgt ? "u" + PCODE[tgt.sec] : "t") + T.fp + "_" + digits + "_" + m;   // some limited (picks.encode)
+      return (tgt ? "q" + PCODE[tgt.sec] : "p") + T.fp + "_" + m;
     };
     var names = function () { return rows.filter(function (r) { return want[r.grp]; }).map(function (r) { return r.grp; }); };
     var same = function () {
       var n = names();
-      return n.length === cur.length - gone.length && n.every(function (g) { return cur.indexOf(g) >= 0; });   // ticks = the picks in the list
+      return n.length === cur.length - gone.length && n.every(function (g) { return cur.indexOf(g) >= 0 && bitsOf(g) === (g in curSess ? curSess[g] : 15) && sideOf(g) === (curSide[g] || ""); });   // ticks = the picks in the list
     };
+    var sessText = function (g) { var b = bitsOf(g), d = sideOf(g), x = [];
+      if (b !== 15) x.push(SESS.filter(function (y, k) { return b >> k & 1; }).map(function (y) { return SESS_SHORT[y]; }).join(", ") || "no session");
+      if (d) x.push(d + "s only");
+      return x.length ? " (" + x.join("; ") + ")" : ""; };
     var msg = el("p", { cls: "note", style: "margin:8px 0" });
     // two "Apply in Telegram" buttons on the Settings tab confused (23 Nov 2026, Arnold: "the apply in telegram appears
     // twice"): this one sends the channel picks only, and says so
@@ -1411,15 +1439,22 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var boxes = [];
     var reset = el("button", { type: "button", cls: "link", style: "margin-left:24px" }, ["Back to the current picks"]);
     function update() {
-      var n = names();
-      savePick50(key, T.fp, same() ? null : want);
+      var n = names(), noSess = n.filter(function (g) { return !bitsOf(g); }), link = mask(want);
+      savePick50(key, T.fp, same() ? null : want, wantS, wantD);
       if (tgt && tgt.onDraft) tgt.onDraft(!same() || gone.length > 0, n);   // the settings panel warns about unsent ticks
       reset.disabled = same();
-      apply.disabled = (same() && !gone.length) || !bot;   // a pick that left the top 50 is dropped by applying
+      apply.disabled = (same() && !gone.length) || !bot || noSess.length > 0 || link.length > 64;   // a pick that left the top 50 is dropped by applying
+      boxes.forEach(function (b) { b.ses.forEach(function (x, k) { var on = !!want[b.grp] && (bitsOf(b.grp) >> k & 1); x.disabled = !want[b.grp];
+        x.className = "sesb" + (on ? " on" : ""); x.setAttribute("aria-pressed", on ? "true" : "false"); });
+        var d = sideOf(b.grp);
+        b.side.disabled = !want[b.grp]; b.side.className = "sesb" + (want[b.grp] ? " on" : "");
+        b.sideLab.textContent = d === "buy" ? "Buys only" : d === "sell" ? "Sells only" : "Buys + sells"; });
       back.disabled = !cur.length || !bot;
       msg.textContent = !bot ? "The tracker’s bot isn’t running, so picks can’t be sent yet." :
         same() && !gone.length ? (cur.length ? "These are the channels picked now for " + who + ". Tick or untick to change them." : "Nothing picked for " + who + ": Best of 10 follows last week’s ranking. Tick channels to copy only those.") :
-        n.length ? who + ": " + n.length + " ticked, NOT sent yet: " + n.join(", ") + ". Press “Apply channel picks in Telegram”, then Start and Apply in the bot." :
+        noSess.length ? "Tick at least one session for " + noSess.join(", ") + " (or untick the channel)." :
+        link.length > 64 ? "Too many channels limited to some sessions for one Telegram link: give some of them every session." :
+        n.length ? who + ": " + n.length + " ticked, NOT sent yet: " + n.map(function (g) { return g + sessText(g); }).join(", ") + ". Press “Apply channel picks in Telegram”, then Start and Apply in the bot." :
         who + ": nothing ticked, NOT sent yet: applying goes back to last week’s ranking. Press “Apply channel picks in Telegram”, then Start and Apply.";
     }
     // (23 Nov 2026, Arnold: "Table needs more columns. We had win rate | score | Note columns. Ranking to use score so as
@@ -1438,6 +1473,15 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (!wkStart || l.status !== "closed" || l.r_multiple == null || (l.posted_at || "") < wkStart) return;
       var c = cw[l.grp] || (cw[l.grp] = { r: 0, n: 0, w: 0, ids: {} });
       c.r += l.r_multiple; c.n += 1; c.w += l.r_multiple > 0.05 ? 1 : 0; c.ids[l.trade_id] = 1;
+    });
+    // each channel's last 28 days by session (every TP, closed positions, the tracker's session of the fill, London time)
+    var s28 = {}, d28 = {}, from28 = new Date(Date.now() - 28 * 864e5).toISOString();
+    (DATA.legs || []).forEach(function (l) {
+      if (l.status !== "closed" || l.r_multiple == null || !l.session || (l.posted_at || "") < from28) return;
+      var c = s28[l.grp] || (s28[l.grp] = {}), x = c[l.session] || (c[l.session] = { r: 0, n: 0, w: 0 });
+      x.r += l.r_multiple; x.n += 1; x.w += l.r_multiple > 0.05 ? 1 : 0;
+      var cd = d28[l.grp] || (d28[l.grp] = {}), y = cd[l.side] || (cd[l.side] = { r: 0, n: 0, w: 0 });
+      y.r += l.r_multiple; y.n += 1; y.w += l.r_multiple > 0.05 ? 1 : 0;
     });
     var shown = rows.map(function (r) { var x = SC[r.grp] || null; return { r: r, x: x, ok: fits(x) }; }).sort(function (p, q) {
       if (p.ok !== q.ok) return p.ok ? -1 : 1;
@@ -1462,21 +1506,39 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var r = it.r, x = it.x;
       var cb = el("input", { type: "checkbox", "aria-label": "Copy " + r.grp, on: { change: function (e) { if (e.target.checked) want[r.grp] = 1; else delete want[r.grp]; update(); } } });
       cb.checked = !!want[r.grp];
-      boxes.push({ cb: cb, grp: r.grp });
+      var ses = SESS.map(function (sn, k) {
+        var d = (s28[r.grp] || {})[sn], lab = SESS_SHORT[sn];
+        return el("button", { type: "button", cls: "sesb", title: sn + " (London time" + SESS_NBO[sn] + "): " + (d ? signed(d.r, 1) + "R from " + d.n + " position" + (d.n === 1 ? "" : "s") + ", " + pct(d.w, d.n) + " won, last 28 days" : "no closed positions in the last 28 days") +
+          ". Tick the channel, then click to copy it in this session or not.",
+          on: { click: function () { var b = bitsOf(r.grp) ^ (1 << k); if (b === 15) delete wantS[r.grp]; else wantS[r.grp] = b; update(); } } },
+          [lab + " ", d ? el("span", { cls: d.r > 0 ? "win" : d.r < 0 ? "loss" : "", text: signed(d.r, 0) }) : "–"]);
+      });
+      var dd = d28[r.grp] || {}, sideTip = function (k, lab) { var d = dd[k]; return lab + ": " + (d ? signed(d.r, 1) + "R from " + d.n + " position" + (d.n === 1 ? "" : "s") + ", " + pct(d.w, d.n) + " won" : "none closed"); };
+      var sideLab = el("span", { text: "Buys + sells" });
+      var side = el("button", { type: "button", cls: "sesb", title: "Last 28 days, every TP. " + sideTip("buy", "Buys") + "; " + sideTip("sell", "Sells") +
+          ". Tick the channel, then click to copy its buys and sells, its buys only, or its sells only. Mostly gold's direction: in a falling week sells win for nearly every channel.",
+          on: { click: function () { var d = sideOf(r.grp), nx = d === "" ? "buy" : d === "buy" ? "sell" : ""; if (nx) wantD[r.grp] = nx; else delete wantD[r.grp]; update(); } } },
+        [sideLab, " ", dd.buy ? el("span", { cls: dd.buy.r > 0 ? "win" : dd.buy.r < 0 ? "loss" : "", text: "B" + signed(dd.buy.r, 0) }) : "B –", " ",
+         dd.sell ? el("span", { cls: dd.sell.r > 0 ? "win" : dd.sell.r < 0 ? "loss" : "", text: "S" + signed(dd.sell.r, 0) }) : "S –"]);
+      boxes.push({ cb: cb, grp: r.grp, ses: ses, side: side, sideLab: sideLab });
       var st = statusOf(r.grp);
       var name = st ? el("span", null, [document.createTextNode(r.grp), el("span", { cls: st.cls, title: st.note.replace(", not copied", ": copied anyway if ticked"), text: st.badge })]) : r.grp;
       var rc = function (v) { return v == null ? "–" : el("span", { cls: v > 0 ? "win" : v < 0 ? "loss" : "", text: signed(v, 1) + "R" }); };
       var c = cw[r.grp];
-      return [cb, String(n + 1), name, x ? rc(x.net) : "–", x ? pct(Math.round(x.win * 100), 100) : "–", x ? x.signals : "–",
+      return [cb, String(n + 1), name, el("span", null, ses), side, x ? rc(x.net) : "–", x ? pct(Math.round(x.win * 100), 100) : "–", x ? x.signals : "–",
         x ? signed(x.score, 1) : "–", c ? rc(c.r) : "–", c ? pct(c.w, c.n) : "–", c ? Object.keys(c.ids).length : 0,
         rc(r.net), r.votes ? "Yes" : "No", noteOf(r.grp, x, it.ok)];
     });
     apply.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=" + mask(want), "_blank"); });
     back.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=" + mask({}), "_blank"); });
-    none.addEventListener("click", function () { want = {}; boxes.forEach(function (b) { b.cb.checked = false; }); update(); });
+    none.addEventListener("click", function () { want = {}; wantS = {}; wantD = {}; boxes.forEach(function (b) { b.cb.checked = false; }); update(); });
     reset.addEventListener("click", function () { want = {}; cur.forEach(function (g) { want[g] = 1; });
+      wantS = {}; Object.keys(curSess).forEach(function (g) { wantS[g] = curSess[g]; });
+      wantD = {}; Object.keys(curSide).forEach(function (g) { wantD[g] = curSide[g]; });
       boxes.forEach(function (b) { b.cb.checked = !!want[b.grp]; }); update(); });
-    var now = cur.length ? "Picked now: " + cur.length + " channel" + (cur.length > 1 ? "s" : "") + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") + "." :
+    var now = cur.length ? "Picked now: " + cur.length + " channel" + (cur.length > 1 ? "s" : "") + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") +
+      (Object.keys(curSess).length ? " (limited to some sessions: " + Object.keys(curSess).map(function (g) { return g + " " + SESS.filter(function (x, k) { return curSess[g] >> k & 1; }).map(function (x) { return SESS_SHORT[x]; }).join("/"); }).join("; ") + ")" : "") +
+      (Object.keys(curSide).length ? " (one way only: " + Object.keys(curSide).map(function (g) { return g + " " + curSide[g] + "s"; }).join("; ") + ")" : "") + "." :
       "Nothing picked now: Best of 10 copies last week’s best channels.";
     var panel = el("div", { cls: "panel", style: "margin-bottom:10px" }, [apply, back, none, reset, msg,
       gone.length ? el("p", { cls: "note", text: "Picked but no longer in this week’s top 50 (still copied until you apply a new pick): " + gone.join(", ") + "." }) : null,
@@ -1487,9 +1549,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "), ordered by Best of 10’s score: net R × win rate on every TP, " + (B.scores_basis || "last week") +
       (SC && Object.keys(SC).length ? "" : " (not worked out yet: the Sandbox shows it after its next pass)") + "; “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi. Channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") come first. " +
       "Tick the channels Best of 10 should copy " + (tgt ? "on " + tgt.label : "on the Sandbox") + " and press “Apply channel picks in Telegram”" + (tgt ? " (this list’s own button: the settings’ button above doesn’t send picks)" : "") + ": from then on only the ticked channels are copied, whatever their ranking, the channel rules (Blacklisted / Muted) or the mid-week pause. " +
-      "“Back to the ranking” clears the picks. " + now,
-      el("div", null, [panel, table(["Copy", "#", "Channel", "Last wk R", "Last wk win", "Last wk sig.", "Score", "This wk R", "This wk win", "This wk sig.", "28-day R", "Votes", "Note"], body,
-        { num: [1, 3, 4, 5, 6, 7, 8, 9, 10], wrap: [2, 12], cls: "compact" })]));   // the buttons above the 50 rows
+      "“Back to the ranking” clears the picks. " +
+      "“Sessions”: a ticked channel is copied in every session unless you click some off (lit = copied; the number is its last 28 days’ R in that session, every TP; hover for the details). A signal is judged by when the channel posted it, London time: Asia 22:00–07:00 (01:00–10:00 Nairobi), London 07:00–12:00 (10:00–15:00), London + New York 12:00–17:00 (15:00–20:00), New York 17:00–22:00 (20:00–01:00). “Side”: click to copy the channel’s buys and sells (the default), its buys only, or its sells only (B / S: its last 28 days’ R on each side). Side results mostly follow gold’s direction that month, so use it with care. " + now,
+      el("div", null, [panel, table(["Copy", "#", "Channel", "Sessions (28-day R)", "Side (28-day R)", "Last wk R", "Last wk win", "Last wk sig.", "Score", "This wk R", "This wk win", "This wk sig.", "28-day R", "Votes", "Note"], body,
+        { num: [1, 5, 6, 7, 8, 9, 10, 11, 12], wrap: [2, 3, 4, 14], cls: "compact" })]));   // the buttons above the 50 rows
   }
   function b3BackfillNote(bandit) {   // why "Include backfill" doesn't change this tab (the bandit page has its own wording since 23 Nov 2026)
     if (bandit) return el("p", { cls: "note", style: "margin-bottom:12px;max-width:80ch", text:
@@ -2421,7 +2484,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["max_open", "M", "int", "Max open trades", "Open plus waiting orders at once, every strategy together (a Best of 10 signal opens one position per TP, as many as fit). 1 – 20."],
     ["consensus", "Q", "bool", "Consensus orders", "Trade the consensus: 2+ independent channels agree. Off = no consensus orders (and no ladder)."],
     ["ladder", "R", "bool", "Ladder orders", "A second, half-size order $5 better than the consensus entry (needs consensus orders on)."],
-    ["best10", "B", "bool", "Best of 10, every TP", "Copy every TP of each new signal from last week’s best channels (how many: the next row), breakeven once half the TPs hit. Locked until the admin unlocks it for this account."],
+    ["best10", "B", "bool", "Best of 10, every TP", "Copy every TP of each new signal from last week’s best channels (how many: the next row); stops trail by the TPs (the split trail: see Profit lock below). Locked until the admin unlocks it for this account."],
     ["best10_top", "H", "int", "Channels to copy", "How many of last week’s best channels Best of 10 copies (3 = the old Best of 3’s pick). A change re-ranks the week at once. 1 – 10."],
     ["best10_lots", "J", "lots", "Best of 10 lots", "Size of EACH Best of 10 position: auto (0.01 below $2,000 of balance, then 0.01 per $1,000) or a fixed size. A signal opens one position per TP, so a 10-TP signal at 0.01 lots risks about $100 at the $10 stops."],
     ["early_exit", "E", "bool", "Early exit", "Close at −$5 if price rushes against the trade within 2 minutes."],
@@ -2469,8 +2532,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       "stop_usd", "ladder_stop", function (a) { var m = fixedOf(a).b10_max_sl; return "Channel’s own stop" + (m ? " (at most $" + m + ")" : ""); }],
     ["Early exit", "Close the trade if price rushes against it right after the entry (consensus) or the fill (ladder): $5 within 2 minutes on the demo’s rules. Best of 10: none.",
       "early_exit", "ladder_early", function () { return "No"; }],
-    ["Profit lock", "Consensus: once +$4, its stop moves to +$2. Ladder: its stop moves up once it is within $1 of its TP. Best of 10: stops to breakeven once half its TPs hit (fixed rule).",
-      "profit_lock", "ladder_lock", function (a) { var f = fixedOf(a); return f.b10_be_half === false ? "No" : "Breakeven once half the TPs hit"; }],
+    ["Profit lock", "Consensus: once +$4, its stop moves to +$2. Ladder: its stop moves up once it is within $1 of its TP. Best of 10 (fixed rule): the split trail since 23 Nov 2026, once TP1 hits the farther half of the positions still open move their stop to breakeven (the nearer half keep theirs); once TP2 hits those move to TP2 and the rest to breakeven; after TP3 and later all move to the TP before.",
+      "profit_lock", "ladder_lock", function (a) { var f = fixedOf(a);   // the live copy's [best10] step_trail (shipped 23 Nov 2026), else breakeven at half
+        return f.b10_step_trail === "split" ? "Split trail: TP1 → farther half to breakeven; TP2 → those to TP2, rest to breakeven" :
+          f.b10_step_trail ? "Step trail: TP1 → breakeven, then the TP before" : f.b10_be_half === false ? "No" : "Breakeven once half the TPs hit"; }],
     ["Opposite signal exit", "Close the consensus trade and its ladder while in profit when a voting channel posts the other way. Best of 10: none.",
       "opposite_exit", function (a) { return "Same as consensus: " + ((a.portal.values || {}).opposite_exit ? "Yes" : "No"); }, function () { return "No"; }],
     ["Pause after an opposite consensus", "No consensus or ladder order this many minutes after a consensus the other way. 0 = off. Best of 10 doesn’t use it.",
@@ -2588,7 +2653,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (DATA.top50 && (DATA.top50.rows || []).length) {
       var ap = (DATA.top50.accounts || {})[sec] || {};
       nPicked = (ap.picked || []).length;
-      pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], changed_by: ap.changed_by, changed_at: ap.changed_at, on: !!cur.best10,
+      pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], sessions: ap.sessions || {}, sides: ap.sides || {}, changed_by: ap.changed_by, changed_at: ap.changed_at, on: !!cur.best10,
         onDraft: function (dirty, n) {
           pickDirty = dirty;
           pickWarn.style.display = dirty ? "" : "none";
