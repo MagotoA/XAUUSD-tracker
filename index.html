@@ -270,7 +270,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
 (function () {
   "use strict";
   var DATA = { trades: [], legs: [] }, LEGS = [], SIGS = [], CLEGS = [], CSIGS = [], NOTE = "";
-  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["account", "Live account"], ["best3", "Sandbox"], ["analytics", "Analytics"], ["history", "History"], ["settings", "Settings"]];
+  var VIEWS = [["overview", "Overview"], ["channels", "Channels"], ["live", "Live"], ["consensus", "Consensus"], ["account", "Live account"], ["best3", "Sandbox"], ["analytics", "Analytics"], ["history", "History"], ["agents", "Agents"], ["settings", "Settings"]];
   var OUTCOMES = ["TP hit", "Stop loss", "Trailing stop", "Breakeven stop", "Closed by channel", "Timed out", "Open", "Waiting for entry", "Not filled", "Invalid"];
 
   // ---------- state in the address (#v=channels&c=…), so it survives the automatic refresh ----------
@@ -2244,6 +2244,73 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : empty("No channel with 3+ closed signals here. Widen the period or the filters, or tick Include backfill.")])));
   }
 
+
+  // ===== Agents (23 Nov 2026, Arnold: "will they be on website?"): the agents pack's own view, from the files the agents
+  // write (the tracker's agents_status): the kill switch, every program's health (Supervisor), each account's open risk
+  // at the stops and what the Risk Guardian did (or, in shadow, would have done), the News Sentinel and the last audit =====
+  var AG_ICON = { ok: "🟢", paused: "⏸️", watch: "🟡", down: "🔴", halted: "⛔" };
+  function agentsAlert() {
+    var a = DATA.agents;
+    if (!a) return "";
+    if (a.halt && a.halt.halted) return "Trading is halted (kill switch)";
+    var lv = (a.status || {}).overall;
+    return lv === "down" || lv === "watch" ? "Supervisor: " + lv : "";
+  }
+  function viewAgents(v) {
+    var a = DATA.agents;
+    if (!a) { v.appendChild(empty("The agents pack isn’t installed yet.")); return; }
+    var st = a.status || {}, g = a.guardian || {}, nw = a.news || {}, au = a.audit, h = a.halt || {};
+    var shadow = g.mode === "shadow";
+    v.appendChild(el("p", { style: "margin:0 0 12px;max-width:80ch" }, [el("strong", { text: "Agents: " }),
+      "plain rules that watch and protect every account (no AI decides an order). The Supervisor checks every program each minute, the Risk Guardian checks each new order, the News Sentinel looks after open positions before high-impact US news, and the Auditor checks the day’s orders against your settings at 00:10. In Telegram (admin): /halt [reason], /unhalt, /risk, /status, /news, /audit."]));
+    v.appendChild(el("div", { cls: "panel", style: "margin-bottom:14px;" + (h.halted ? "border-color:var(--loss)" : "") }, [
+      el("strong", { text: h.halted ? "⛔ Trading is HALTED on every account" : "Kill switch: off (trading normally)" }),
+      el("p", { cls: "note", style: "margin:6px 0 0", text: h.halted ? "By " + (h.by || "?") + (h.at ? ", " + when(h.at) : "") + ": " + (h.why || "") + ". No new orders anywhere, waiting orders removed, open positions keep their stops and targets. Send /unhalt to the bot to resume."
+        : "Send /halt [reason] to the bot (admin) to stop new orders on every account at once: waiting orders are removed, open positions keep their stops and targets." + (h.at ? " Last change " + when(h.at) + (h.by ? " by " + h.by : "") + "." : "") })]));
+    // the Supervisor
+    var progs = st.programs || [];
+    v.appendChild(block("Programs (Supervisor)", st.at ? "Last check " + when(st.at) + ". Overall: " + (AG_ICON[st.overall] || "") + " " + (st.overall || "–") + ". Down = no heartbeat for 3 minutes (a Telegram alert at once, a reminder every hour); watch = errors piling up, no new signal for 2 hours on a weekday, or an account’s open risk over 80% of its cap." : "No check yet (the Supervisor runs in the tracker and the Sandbox once they restart with the pack).",
+      progs.length ? table(["Program", "Status", "Last heartbeat", "Notes"], progs.map(function (p) {
+        return [p.name, (AG_ICON[p.level] || "") + " " + p.level, p.seen ? when(p.seen) : "–", (p.why || []).join("; ")]; }), { wrap: [3], cls: "compact" }) : empty("Nothing reported yet.")));
+    // open risk per account
+    var acc = (a.accounts || []).slice().sort(function (x, y) { return String(x.who) < String(y.who) ? -1 : 1; });
+    v.appendChild(block("Open risk at the stops (Risk Guardian)", "What every open position and waiting order of the account would lose if all hit their stops, now (each program reports every 10 seconds). " +
+      (g.mode === "off" ? "The guardian is off." : "Cap: " + (g.cap_pct || 0) + "% of the balance" + (Object.keys(g.per_account || {}).length ? " (own caps: " + Object.keys(g.per_account).map(function (k) { return k + " " + ((g.per_account[k] || {}).max_open_risk_percent || "?") + "%"; }).join(", ") + ")" : "") +
+        (g.no_opposite ? "; no new trade against an open position" : "") + ". " + (shadow ? "Mode SHADOW: nothing is blocked; the guardian only notes what it would have done (below)." : "Mode ON: orders over the cap are trimmed or refused.")),
+      acc.length ? table(["Account", "Balance", "Open risk", "Of balance", "Cap", "Buys / sells", "Waiting", "Reported"], acc.map(function (x) {
+        var used = (x.held || 0) + (x.waiting || 0), cur = x.currency || "";
+        var over = x.cap && used > x.cap;
+        return [(x.who || "") + " (" + x.login + ")", fmt(x.balance, 2) + " " + cur, el("span", { cls: over ? "loss" : "", text: fmt(used, 2) + " " + cur }),
+          x.balance ? pct(Math.round(used / x.balance * 1000), 1000) : "–", x.cap != null ? fmt(x.cap, 2) + " (" + x.cap_pct + "%" + (x.mode === "shadow" ? ", shadow" : "") + ")" : "none",
+          (x.buys || 0) + " / " + (x.sells || 0), x.orders || 0, x.at ? when(x.at) : "–"]; }), { num: [1, 2, 3, 5, 6], cls: "compact" }) : empty("No account has reported yet.")));
+    // the guardian's decisions
+    var wk = g.week || {}, names = {};
+    acc.forEach(function (x) { names[x.login] = x.who; });
+    var gl = Object.keys(wk);
+    var gs = function (k) { return wk[k].shadow && wk[k].shadow >= wk[k].checks; };
+    v.appendChild(block("Risk Guardian, last 7 days" + (shadow ? " (shadow: would have)" : ""), "Every new order it checked, per account: trimmed = a signal got fewer positions (the first TPs that fit), refused = none. " + (shadow ? "In shadow these orders went through anyway; this is what switching it on would have changed. " : "") + "Rules: against an open position (no buy while a sell is open, and the reverse), over the cap.",
+      el("div", null, [gl.length ? table(["Account", "Orders checked", shadow ? "Would trim" : "Trimmed", shadow ? "Would refuse" : "Refused", "Against an open position", "Over the cap"], gl.map(function (k) {
+        var x = wk[k]; return [(names[k] || "") + " (" + k + ")" + (gs(k) ? " · shadow" : ""), x.checks, x.trimmed, x.refused, x.no_opposite, x.cap]; }), { num: [1, 2, 3, 4, 5], cls: "compact" }) : empty("No order checked yet."),
+        (g.recent || []).length ? table(["Time", "Account", "Side", "Positions asked", shadow ? "Would allow" : "Allowed", "Rule", "Why"], (g.recent || []).slice().reverse().map(function (r) {
+          return [when(r.at), (names[r.login] || "") + " (" + r.login + ")", r.side, r.asked, r.allowed + (r.shadow ? " (shadow: all went through)" : ""), r.rule === "no_opposite" ? "Against an open position" : r.rule === "cap" ? "Over the cap" : r.rule || "", (r.why || "").replace(/^Risk Guardian: /, "")]; }), { num: [3, 4], wrap: [6], cls: "compact" }) : null])));
+    // the News Sentinel
+    var lg = (nw.log || []).slice().reverse();
+    v.appendChild(block("News Sentinel", "Mode " + (nw.mode || "shadow") + ": " + ({ shadow: "changes nothing, notes what it would do", close_winners: "closes positions $" + nw.min_profit_usd + "+ an ounce in profit", breakeven: "moves those positions’ stops to their entry", off: "off" }[nw.mode] || nw.mode) +
+      ", " + nw.lead_min + " minutes before each high-impact US event. The news filters already stop NEW orders around them; this is about positions already open. The daily audit compares holding with closing the winners, event by event." +
+      ((nw.upcoming || []).length ? " Next: " + nw.upcoming.map(function (e) { return e.title + " " + when(e.at); }).join("; ") + "." : " No high-impact US event ahead this week."),
+      lg.length ? table(["Time", "Event", "Account", "Position", "Then", "Action"], lg.map(function (r) {
+        return [when(r.at), r.event, (r.who || "") + " (" + r.login + ")", r.side + " " + r.volume + " @ " + r.open, el("span", { cls: r.per_oz > 0 ? "win" : r.per_oz < 0 ? "loss" : "", text: signed(r.usd, 2) + " (" + signed(r.per_oz, 2) + "/oz)" }), r.action + (r.mode === "shadow" ? " (shadow)" : "")]; }), { wrap: [1], cls: "compact" }) : empty("No position was open before an event yet.")));
+    // the Auditor
+    if (au) {
+      var names2 = { consensus: "Consensus", ladder: "Ladder", best10: "Best of 10" };
+      v.appendChild(block("Auditor, " + au.day, "Each account’s day checked against its own settings in force then (stops, lots, risk per order, max open trades, the news window, the strategies ticked). " + (au.since ? "Days before " + au.since + " are listed to review only (rules may have differed). " : "") + "Written " + when(au.generated_at) + "; in Telegram at 00:10 every day, /audit for any day.",
+        el("div", null, [table(["Account", "Results that day", "Breaches", "To watch", "To review"], (au.accounts || []).map(function (x) {
+          var parts = Object.keys(x.results || {}).map(function (k) { var d = (x.results[k] || {}).day || {}; return d.closed ? (names2[k] || k) + " " + d.closed + " closed, " + d.won + " won, " + usd(d.net) : ""; }).filter(Boolean);
+          return [x.account, parts.join("; ") || "nothing closed", x.breaches ? el("span", { cls: "loss", text: String(x.breaches) }) : "0", x.watch, x.review]; }), { num: [2, 3, 4], wrap: [1], cls: "compact" }),
+          (au.findings || []).length ? table(["Time", "Account", "Rule", "Detail"], au.findings.map(function (f) { return [when(f.at), f.account, (f.severity === "breach" ? "⚠️ " : "👀 ") + f.rule, f.detail]; }), { wrap: [3], cls: "compact" }) : el("p", { cls: "note", text: "No breach and nothing to watch that day." })])));
+    } else v.appendChild(block("Auditor", "", empty("No audit yet: the first one runs at 00:10 Nairobi after the restart (or send /audit to the bot).")));
+  }
+
   // ===== Stops & targets =====
   function whatIf(legs, kind, levels) {   // dollars per 0.01 lot: a tighter stop or a smaller target, from each trade's MAE / MFE
     var base = sum(legs.map(function (l) { return l.pnl_usd || 0; })), out = [];
@@ -2467,7 +2534,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var bar = document.getElementById("fbar"), out = document.getElementById("fsum");
     if (!bar) return;
     bar.textContent = ""; out.textContent = "";
-    bar.style.display = out.style.display = state.v === "settings" ? "none" : "";   // the Settings tab has no filters
+    bar.style.display = out.style.display = state.v === "settings" || state.v === "agents" ? "none" : "";   // the Settings and Agents tabs have no filters
     var f = fx(), so = stratOptions();
     var select = function (label, val, opts, pick) {
       var x = el("select", { "aria-label": label, cls: val ? "on" : "", on: { change: function (e) { pick(e.target.value); } } },
@@ -2558,11 +2625,13 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     VIEWS.forEach(function (x) {
       if (x[0] === "account" && !lt) return;   // only when the live trader runs
       if (x[0] === "best3" && !sandboxList().length) return;   // only when a strategy is on trial
+      if (x[0] === "agents" && !DATA.agents) return;   // only once the agents pack reports (23 Nov 2026)
       var b = el("button", { "aria-current": state.v === x[0] ? "page" : null, on: { click: function () { go({ v: x[0], c: x[0] === "channels" ? state.c : "" }); } } },
         [x[1], x[0] === "live" && live ? el("span", { cls: "count", text: String(live) }) : null,
          x[0] === "consensus" && cLive ? el("span", { cls: "count", text: String(cLive) }) : null,
          x[0] === "account" && lOpen ? el("span", { cls: "count", text: String(lOpen) }) : null,
-         x[0] === "best3" && b3Open ? el("span", { cls: "count", text: String(b3Open) }) : null]);
+         x[0] === "best3" && b3Open ? el("span", { cls: "count", text: String(b3Open) }) : null,
+         x[0] === "agents" && agentsAlert() ? el("span", { cls: "count", title: agentsAlert(), text: "!" }) : null]);
       nav.appendChild(b);
     });
     renderFilters();
@@ -2878,7 +2947,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var v = document.getElementById("view");
     v.textContent = "";
     POST = [];
-    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, best3: viewBest3, analytics: viewAnalytics, history: viewHistory, settings: viewSettings }[state.v] || viewOverview)(v);
+    ({ overview: viewOverview, consensus: viewConsensus, channels: viewChannels, live: viewLive, account: viewAccount, best3: viewBest3, analytics: viewAnalytics, history: viewHistory, agents: viewAgents, settings: viewSettings }[state.v] || viewOverview)(v);
     var secs = v.querySelectorAll("section.block");
     if (secs.length > 1) {   // collapse or expand every section of this tab at once
       var all = function (folded) { v.querySelectorAll("section.block").forEach(function (s) { setFold(s, folded); }); saveFold(); if (!folded) render(); };
