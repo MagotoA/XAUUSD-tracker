@@ -133,6 +133,10 @@ ol.board button:focus-visible { outline: 2px solid var(--gold); outline-offset: 
 
 /* Bars (HTML) */
 .bars { display: grid; gap: 8px; }
+/* Analytics sections (23 Nov 2026) */
+.seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+.segb { font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 16px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); cursor: pointer; }
+.segb.on { background: var(--gold-soft); border-color: var(--gold); color: var(--gold-strong); font-weight: 600; }
 .bars .row { display: grid; grid-template-columns: minmax(96px, 150px) 1fr 76px; gap: 10px; align-items: center; font-size: 14px; }
 .bars .lab { overflow-wrap: anywhere; } .bars .lab small { color: var(--muted); display: block; font-size: 12px; }
 .bars .track { position: relative; height: 12px; background: var(--chip); border-radius: 3px; }
@@ -269,7 +273,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var p = new URLSearchParams(location.hash.slice(1));
     var st = { ps: p.get("ps") || "", v: p.get("v") || "overview", c: p.get("c") || "", bf: p.get("bf") === "1", q: p.get("q") || "",
              s: p.get("s") || "totalR", d: p.get("d") !== "0", ho: p.get("ho") || "",
-             om: parseInt(p.get("om") || "0", 10) || 0, la: parseInt(p.get("la") || "0", 10) || 0, sv: p.get("sv") || (p.get("bv") === "1" ? "bandit" : ""),
+             om: parseInt(p.get("om") || "0", 10) || 0, la: parseInt(p.get("la") || "0", 10) || 0, sv: p.get("sv") || (p.get("bv") === "1" ? "bandit" : ""), an: p.get("an") || "",
              // the filter bar: period (fp, with ff/ft for chosen dates), channels (fc, one or more), side (fs), result (fr), strategy (fg)
              fp: p.get("fp") || "", ff: p.get("ff") || "", ft: p.get("ft") || "", fc: p.getAll("fc").filter(Boolean),
              fs: p.get("fs") || "", fr: p.get("fr") || "", fg: p.get("fg") || "" };
@@ -296,6 +300,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (state.om) p.set("om", String(state.om));
     if (state.la) p.set("la", String(state.la));
     if (state.sv) p.set("sv", state.sv);
+    if (state.an) p.set("an", state.an);
     if (state.ps) p.set("ps", state.ps);
     history.replaceState(null, "", "#" + p.toString());
   }
@@ -1754,7 +1759,300 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       return { label: k, rows: r, n: r.length, avg: sum(rs) / r.length, total: sum(rs), wins: r.filter(function (t) { return t.result === "win"; }).length };
     });
   }
+  // ---------- Analytics (23 Nov 2026, Arnold: "The analytics section is weak. Could you improve it so that we can get
+  // more insights"; chose all four: Money & risk, Consensus deep-dive, Channel quality, Stops & targets) ----------
+  var ANALYTICS = [["money", "Money & risk"], ["consensus", "Consensus"], ["channels", "Channel quality"], ["stops", "Stops & targets"], ["signals", "All signals"]];
   function viewAnalytics(v) {
+    var cur = ANALYTICS.some(function (a) { return a[0] === state.an; }) ? state.an : "money";
+    v.appendChild(el("div", { cls: "seg", role: "group", "aria-label": "Analytics section" }, ANALYTICS.map(function (a) {
+      return el("button", { type: "button", cls: "segb" + (a[0] === cur ? " on" : ""), "aria-pressed": a[0] === cur ? "true" : "false",
+        on: { click: function () { go({ an: a[0] }, true); } } }, [a[1]]);
+    })));
+    ({ money: anMoney, consensus: anConsensus, channels: anChannels, stops: anStops, signals: anSignals }[cur])(v);
+  }
+  var usd = function (x, d) { return x == null || isNaN(x) ? "–" : (x > 0 ? "+$" : x < 0 ? "−$" : "$") + Math.abs(x).toFixed(d == null ? 2 : d); };
+  var ucell = function (x, d) { return x == null || isNaN(x) ? "–" : el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: usd(x, d) }); };
+  var rcell = function (x, d) { return x == null || isNaN(x) ? "–" : el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: signed(x, d == null ? 1 : d) + "R" }); };
+  function weekStartMs(t) {   // the tracker's week: from Sunday 23:00 Nairobi (20:00 UTC)
+    var d = new Date(t), ws = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - d.getUTCDay() * DAY + 20 * 3600e3;
+    return ws > t ? ws - 7 * DAY : ws;
+  }
+  function kpiRow(items) {
+    return el("dl", { cls: "kpis", style: "margin-bottom:14px" }, items.map(function (k) { return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); }));
+  }
+  function quant(a, q) { if (!a.length) return null; var b = a.slice().sort(function (x, y) { return x - y; }); return b[Math.min(b.length - 1, Math.floor(q * b.length))]; }
+
+  // ===== Money & risk: the live accounts in dollars =====
+  function acctClosed(lt) {   // every closed order or position of a live account (all strategies), oldest first
+    var out = [];
+    (lt.trades || []).forEach(function (x) {
+      if (x.profit == null || !liveOrderOK(x)) return;
+      out.push({ t: Date.parse(x.exit_time || x.at), p: x.profit, s: orderKind(x) });
+    });
+    COPY_STRATS.forEach(function (k) {
+      var bb = lt[k[0]];
+      (bb && bb.trades || []).forEach(function (x) { if (x.profit != null && orderOK(x, k[0], x.grp)) out.push({ t: Date.parse(x.at), p: x.profit, s: k[0] }); });
+    });
+    return out.filter(function (r) { return !isNaN(r.t); }).sort(function (a, b) { return a.t - b.t; });
+  }
+  function moneyStats(rows) {
+    var cum = 0, peak = 0, dd = 0, run = 0, streak = 0, days = {}, now = Date.now(), d0 = nbMidnight(now), w0 = weekStartMs(now);
+    rows.forEach(function (r) {
+      cum += r.p; peak = Math.max(peak, cum); dd = Math.max(dd, peak - cum);
+      if (r.p < 0) { run++; streak = Math.max(streak, run); } else if (r.p > 0) run = 0;
+      var k = nbYmd(r.t); days[k] = (days[k] || 0) + r.p;
+    });
+    var dv = Object.keys(days).map(function (k) { return days[k]; });
+    return { n: rows.length, wins: rows.filter(function (r) { return r.p > 0; }).length, net: sum(rows.map(function (r) { return r.p; })),
+      dd: dd, streak: streak, days: days, best: dv.length ? Math.max.apply(null, dv) : null, worst: dv.length ? Math.min.apply(null, dv) : null,
+      today: sum(rows.filter(function (r) { return r.t >= d0; }).map(function (r) { return r.p; })),
+      week: sum(rows.filter(function (r) { return r.t >= w0; }).map(function (r) { return r.p; })),
+      pts: rows.map(function (r, i, a) { return [r.t, sum(a.slice(0, i + 1).map(function (x) { return x.p; }))]; }) };
+  }
+  function anMoney(v) {
+    var accts = liveAccounts().filter(function (a) { return /^live/.test(a.section || "live"); });
+    if (!accts.length) { v.appendChild(empty("No live account reports yet.")); return; }
+    var data = accts.map(function (a) { var rows = acctClosed(a); return { a: a, rows: rows, m: moneyStats(rows) }; });
+    v.appendChild(el("p", { cls: "note", style: "margin:0 0 12px;max-width:85ch", text: "The live accounts’ real results (the broker’s profit after costs), every strategy together: consensus, ladder and Best of 10. Closed trades only; open positions show in MT5. The filters above (period, side, result, channels) apply." }));
+    v.appendChild(block("Accounts at a glance", "Drawdown = the biggest fall from a peak in the running total of closed trades; losing streak = losses in a row.",
+      table(["Account", "Balance", "Closed", "Win rate", "Net", "This week", "Today", "Best day", "Worst day", "Max drawdown", "Losing streak"], data.map(function (d) {
+        var m = d.m, bal = d.a.balance;
+        return [d.a.label || d.a.section, bal == null ? "–" : "$" + bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), m.n,
+          pct(m.wins, m.n), ucell(m.net), ucell(m.week), ucell(m.today), ucell(m.best), ucell(m.worst),
+          m.dd ? usd(-m.dd) + (bal ? " (" + Math.round(m.dd / bal * 100) + "% of balance)" : "") : "–", m.streak];
+      }), { num: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], cls: "compact" })));
+    var colors = ["var(--gold)", "#2F6FB0", "#8A4FB0", "var(--win)"];
+    var series = data.filter(function (d) { return d.m.pts.length; }).map(function (d, i) { return { name: d.a.label || d.a.section, pts: d.m.pts, color: colors[i % colors.length], strong: true }; });
+    v.appendChild(block("Running total of closed trades", "Each account’s cumulative profit, in dollars, by the time each trade closed (Best of 10 by its signal time).",
+      el("div", null, [el("div", { cls: "panel" }, [chart(function (w) { return lineChart(series, { unit: "", label: "Running total per account", emptyText: "The chart starts once trades close." }, w); })]),
+        el("p", { cls: "note", style: "margin-top:6px" }, series.map(function (s) { return el("span", { style: "margin-right:16px" }, [el("span", { style: "display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:6px;background:" + s.color }), s.name]); }))])));
+    var allDays = {};
+    data.forEach(function (d) { Object.keys(d.m.days).forEach(function (k) { allDays[k] = 1; }); });
+    var dayList = Object.keys(allDays).sort().reverse().slice(0, 21);
+    v.appendChild(block("Day by day", "Closed-trade profit per day (Nairobi days), newest first, the last 21 trading days.",
+      dayList.length ? table(["Day"].concat(data.map(function (d) { return d.a.label || d.a.section; })).concat(["All accounts"]), dayList.map(function (k) {
+        var vals = data.map(function (d) { return d.m.days[k]; });
+        return [k].concat(vals.map(function (x) { return x == null ? "–" : ucell(x); })).concat([ucell(sum(vals.map(function (x) { return x || 0; })))]);
+      }), { num: data.map(function (d, i) { return i + 1; }).concat([data.length + 1]), cls: "compact" }) : empty("No closed trades in this period.")));
+    var srows = [];
+    data.forEach(function (d) {
+      [["consensus", "Consensus"], ["ladder", "Ladder"], ["best10", "Best of 10"], ["best3", "Best of 3 (removed)"], ["own", "Own signals"]].forEach(function (k) {
+        var r = d.rows.filter(function (x) { return x.s === k[0]; });
+        if (!r.length) return;
+        var ps = r.map(function (x) { return x.p; });
+        srows.push([d.a.label || d.a.section, k[1], r.length, pct(ps.filter(function (x) { return x > 0; }).length, r.length), ucell(sum(ps)), ucell(sum(ps) / r.length), ucell(Math.max.apply(null, ps)), ucell(Math.min.apply(null, ps))]);
+      });
+    });
+    v.appendChild(block("By strategy", "Which strategy makes or loses the money on each account.",
+      srows.length ? table(["Account", "Strategy", "Closed", "Win rate", "Net", "Average", "Best", "Worst"], srows, { num: [2, 3, 4, 5, 6, 7], cls: "compact" }) : empty("No closed trades in this period.")));
+  }
+
+  // ===== Consensus deep-dive: the trades we actually take =====
+  function notTraded(t) { return t.status === "invalid" && /^not traded:/.test(t.exit_reason || ""); }
+  function whyCat(t) {
+    var r = (t.exit_reason || "").replace(/^not traded:\s*/, "").toLowerCase();
+    if (/other direction|formed .* before/.test(r)) return "Pause after an opposite consensus";
+    if (/past the channels/.test(r)) return "Price already $3+ past the channels’ entry";
+    if (/no play left|past our target/.test(r)) return "No play left";
+    if (/news/.test(r)) return "News filter";
+    if (/max_open|open or pending|already .*open/.test(r)) return "Max open trades";
+    if (/later|too late|found late/.test(r)) return "Found late";
+    if (/never placed/.test(r)) return "Never placed";
+    if (/stop/.test(r)) return "Stop too far";
+    return "Other";
+  }
+  function anConsensus(v) {
+    var LAD = "Consensus ladder";
+    var sigs = CSIGS.filter(function (t) { return t.grp !== LAD && (state.bf || t.source !== "backfill") && inPeriod(tOf(t, "posted_at")) && chanOK(supporters(t.id)) && sideOK(t.side); });
+    var legs = cpool().filter(function (l) { return l.grp !== LAD && l.status === "closed" && l.r_multiple != null; });
+    var skip = sigs.filter(notTraded), ai = skip.filter(function (t) { return t.meta && t.meta.as_if && t.meta.as_if.pnl != null; });
+    var lw = legs.filter(function (l) { return l.result === "win"; }).length;
+    v.appendChild(el("p", { cls: "note", style: "margin:0 0 12px;max-width:85ch", text: "The consensus as the tracker scores it (TP1, the $10 stop, dollars per 0.01 lot), plus each consensus the accounts didn’t take, scored as if it had gone in at market when it formed. The filters above apply." }));
+    v.appendChild(kpiRow([["Consensus formed", sigs.length], ["Traded and closed", legs.length], ["Win rate", pct(lw, legs.length)],
+      ["Net (traded)", legs.length ? signed(sum(legs.map(function (l) { return l.r_multiple; })), 1) + "R · " + usd(sum(legs.map(function (l) { return l.pnl_usd || 0; }))) : "–"],
+      ["Not traded", skip.length], ["Not traded, as if", ai.length ? usd(sum(ai.map(function (t) { return t.meta.as_if.pnl; }))) + " (" + pct(ai.filter(function (t) { return t.meta.as_if.pnl > 0; }).length, ai.length) + " wins)" : "–"]]));
+    var bySess = group(legs, function (t) { return t.session || "Unknown"; }, ["Asia", "London", "London + New York", "New York"]);
+    var dn = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    var byDay = group(legs, function (t) { return dn[(new Date(t.fill_at || t.posted_at).getDay() + 6) % 7]; }, dn);
+    var bl = function (gs) { return bars(gs.map(function (s) { return { label: s.label, sub: plural(s.n, "trade") + ", " + pct(s.wins, s.n) + " wins, " + signed(s.total, 1) + "R", value: s.avg }; }), { diverging: true, fmt: function (x) { return signed(x, 2) + "R"; } }); };
+    v.appendChild(el("div", { cls: "grid2" }, [block("By session", "Average R per consensus trade, London time.", el("div", { cls: "panel" }, [bl(bySess)])),
+      block("By weekday", "Average R per consensus trade.", el("div", { cls: "panel" }, [bl(byDay)]))]));
+    var hours = []; for (var h = 0; h < 24; h++) hours.push(h);
+    var byHour = hours.map(function (hh) {
+      var r = legs.filter(function (t) { return new Date(t.fill_at || t.posted_at).getHours() === hh; });
+      return { label: pad2(hh), value: r.length ? sum(r.map(function (t) { return t.r_multiple; })) / r.length : 0, n: r.length };
+    });
+    v.appendChild(block("By hour", "Average R per consensus trade by the hour it filled, your time zone. Faded: fewer than 5 trades.",
+      el("div", { cls: "panel" }, [chart(function (w) { return columns(byHour, { labelEvery: w < 560 ? 3 : 2, minN: 5, fmt: function (x) { return signed(x, 2) + "R"; }, label: "Consensus average R by hour" }, w); })])));
+    // each filter: what the consensus it stopped would have done
+    var cats = group(skip, whyCat);
+    var frows = cats.map(function (c) {
+      var done = c.rows.filter(function (t) { return t.meta && t.meta.as_if && t.meta.as_if.pnl != null; }), net = sum(done.map(function (t) { return t.meta.as_if.pnl; }));
+      return { c: c, done: done, net: net };
+    }).sort(function (a, b) { return b.c.n - a.c.n; });
+    v.appendChild(block("What each filter did", "Consensus the accounts didn’t take, by reason, scored as if traded (dollars per 0.01 lot). A negative total means the filter saved money; positive means it cost money. Found late / never placed / stop too far aren’t scored.",
+      frows.length ? table(["Reason", "Consensus", "Scored", "Would have won", "As if (0.01 lots)", "As if R", "Verdict"], frows.map(function (f) {
+        var w = f.done.filter(function (t) { return t.meta.as_if.pnl > 0; }).length;
+        return [f.c.label, f.c.n, f.done.length, f.done.length ? w + " (" + pct(w, f.done.length) + ")" : "–", f.done.length ? ucell(f.net) : "–",
+          f.done.length ? rcell(sum(f.done.map(function (t) { return t.meta.as_if.r || 0; }))) : "–",
+          !f.done.length ? "–" : f.net < 0 ? "Saved " + usd(-f.net).replace("+", "") : f.net > 0 ? "Cost " + usd(f.net).replace("+", "") : "No difference"];
+      }), { num: [1, 2, 4, 5], wrap: [0], cls: "compact" }) : empty("Every consensus in this period was traded.")));
+    // speed: from the channel's post to the order on each account
+    var secs = function (a, b) { var x = (Date.parse(b) - Date.parse(a)) / 1000; return isNaN(x) || x < 0 || x > 1800 ? null : x; };
+    var byId = {}; sigs.forEach(function (t) { byId[t.id] = t; });
+    var spd = [], ready = sigs.map(function (t) { return t.meta && t.meta.ready_at ? secs(t.posted_at, t.meta.ready_at) : null; }).filter(function (x) { return x != null && x <= 600; });
+    if (ready.length) spd.push(["Tracker: consensus ready", ready.length, fmt(median(ready), 1) + " s", fmt(quant(ready, 0.9), 1) + " s", fmt(Math.max.apply(null, ready), 0) + " s"]);
+    var slip = [];
+    var demoBy = {}; (DATA.autotrades || []).forEach(function (x) { if (x.consensus_id && x.fill_price != null) demoBy[x.consensus_id] = x; });
+    liveAccounts().forEach(function (a) {
+      var ds = [], sl = [], sd = [];
+      (a.trades || []).forEach(function (x) {
+        if (orderKind(x) !== "consensus" || !byId[x.consensus_id]) return;
+        var c = byId[x.consensus_id], d = secs(c.posted_at, x.at);
+        if (x.ticket != null && d != null) ds.push(d);
+        if (x.fill_price != null) {
+          var sgn = x.side === "buy" ? 1 : -1, ref = c.meta && c.meta.ref_price;
+          if (ref != null) sl.push((x.fill_price - ref) * sgn);
+          var dm = demoBy[x.consensus_id];
+          if (dm && a.section !== "autotrade") sd.push((x.fill_price - dm.fill_price) * sgn);
+        }
+      });
+      if (ds.length) spd.push([(a.label || a.section) + ": order placed", ds.length, fmt(median(ds), 1) + " s", fmt(quant(ds, 0.9), 1) + " s", fmt(Math.max.apply(null, ds), 0) + " s"]);
+      if (sl.length || sd.length) slip.push([a.label || a.section, sl.length, sl.length ? usd(-sum(sl) / sl.length) : "–", sl.length ? usd(-median(sl)) : "–", sd.length ? usd(-sum(sd) / sd.length) + " (" + sd.length + ")" : "–"]);
+    });
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("Speed", "Seconds from the channel post that completed the consensus to each step.", spd.length ? table(["Step", "Count", "Median", "90% within", "Slowest"], spd, { num: [1, 2, 3, 4], cls: "compact" }) : empty("No timed consensus in this period.")),
+      block("Fill price vs the consensus price", "Per order, dollars: negative = filled worse than the price when the consensus formed (or than the demo’s fill).", slip.length ? table(["Account", "Fills", "Average", "Median", "vs the demo’s fill"], slip, { num: [1, 2, 3, 4], cls: "compact" }) : empty("No filled consensus orders in this period."))]));
+  }
+
+  // ===== Channel quality =====
+  function anChannels(v) {
+    var now = Date.now(), w0 = weekStartMs(now), W = 8, starts = [];
+    for (var i = W - 1; i >= 0; i--) starts.push(w0 - i * 7 * DAY);
+    var legs = LEGS.filter(function (t) { return (state.bf || t.source !== "backfill") && t.status === "closed" && t.r_multiple != null && (t.leg || 1) === 1; });
+    var per = {};
+    legs.forEach(function (t) {
+      var x = Date.parse(t.posted_at); if (isNaN(x) || x < starts[0]) return;
+      var k = Math.min(W - 1, Math.floor((x - starts[0]) / (7 * DAY)));
+      var c = per[t.grp] || (per[t.grp] = { w: [], n: [] });
+      c.w[k] = (c.w[k] || 0) + t.r_multiple; c.n[k] = (c.n[k] || 0) + 1;
+    });
+    var names = DATA.top50 && (DATA.top50.rows || []).length ? DATA.top50.rows.map(function (r) { return r.grp; }) : Object.keys(per);
+    names = names.filter(function (g) { return per[g] && chanOK(g); });
+    var tot = function (g, a, b) { var c = per[g]; var s0 = 0; for (var k = a; k <= b; k++) s0 += c.w[k] || 0; return s0; };
+    names.sort(function (a, b) { return tot(b, 0, W - 1) - tot(a, 0, W - 1); });
+    var cellStyle = function (x) {
+      if (x == null) return "color:var(--muted)";
+      var a = Math.min(1, Math.abs(x) / 8) * 0.55 + 0.08;
+      return "background:" + (x >= 0 ? "rgba(43,122,75," : "rgba(178,63,44,") + a.toFixed(2) + ")";
+    };
+    var head = el("tr", null, [el("th", { scope: "col", text: "Channel" })].concat(starts.map(function (t, k) { return el("th", { scope: "col", cls: "num", text: k === W - 1 ? "This wk" : day(t + 4 * 3600e3) }); }))
+      .concat([el("th", { scope: "col", cls: "num", text: "8-wk R" }), el("th", { scope: "col", cls: "num", text: "Weeks up" }), el("th", { scope: "col", cls: "num", text: "Trend" })]));
+    var has = function (g, a, b) { var c = per[g]; for (var k = a; k <= b; k++) if (c.n[k]) return true; return false; };
+    var trendOf1 = function (g) { return has(g, W - 5, W - 4) && has(g, W - 3, W - 2) ? tot(g, W - 3, W - 2) - tot(g, W - 5, W - 4) : null; };
+    var body = names.map(function (g) {
+      var c = per[g], up = 0, act = 0;
+      for (var k = 0; k < W; k++) if (c.n[k]) { act++; if ((c.w[k] || 0) > 0) up++; }
+      var tr = trendOf1(g);   // last two full weeks vs the two before (both must have signals)
+      return el("tr", null, [el("td", { cls: "wrap", text: g })].concat(starts.map(function (t, k) {
+        var x = c.n[k] ? c.w[k] : null;
+        return el("td", { cls: "num", style: cellStyle(x), title: x == null ? "no closed signals" : c.n[k] + " closed signals", text: x == null ? "·" : signed(x, 1) });
+      })).concat([el("td", { cls: "num" }, [rcell(tot(g, 0, W - 1))]), el("td", { cls: "num", text: up + "/" + act }),
+        el("td", { cls: "num " + (tr == null ? "" : tr > 0.05 ? "win" : tr < -0.05 ? "loss" : ""), text: tr == null ? "–" : (tr > 0.05 ? "▲ " : tr < -0.05 ? "▼ " : "") + signed(tr, 1) })]));
+    });
+    v.appendChild(block("Week by week, per channel", "TP1 R per week (one position per signal, the tracker’s scoring after costs), the last 8 weeks" + (DATA.top50 ? ", this week’s consensus top 50" : "") +
+      ". Green = a winning week, red = a losing one. “Weeks up”: winning weeks of the weeks it had signals; “Trend”: the last two full weeks against the two before (– until both have signals). A channel up most weeks is steadier than one with a single big week." +
+      (state.bf ? "" : " Live logging started 9 Nov: tick Include backfill for the weeks before."),
+      body.length ? el("div", { cls: "scroll" }, [el("table", { cls: "compact" }, [el("thead", null, [head]), el("tbody", null, body)])]) : empty("No closed signals in the last 8 weeks.")));
+    var trendOf = names.map(function (g) { return { g: g, d: trendOf1(g), now: tot(g, W - 3, W - 2) }; }).filter(function (x) { return x.d != null; });
+    var upL = trendOf.filter(function (x) { return x.d > 0; }).sort(function (a, b) { return b.d - a.d; }).slice(0, 8);
+    var dnL = trendOf.filter(function (x) { return x.d < 0; }).sort(function (a, b) { return a.d - b.d; }).slice(0, 8);
+    var tl = function (l) { return l.length ? table(["Channel", "Change", "Last 2 weeks"], l.map(function (x) { return [x.g, rcell(x.d), rcell(x.now)]; }), { num: [1, 2], wrap: [0], cls: "compact" }) : empty("None."); };
+    v.appendChild(el("div", { cls: "grid2" }, [block("Improving", "Biggest gains: the last two full weeks against the two before" + (trendOf.length ? "." : " (needs 4 weeks of signals: tick Include backfill)."), tl(upL)),
+      block("Fading", "Biggest drops.", tl(dnL))]));
+    // which channels' agreement wins: every consensus (traded: the tracker's result; not traded: as if) credited to the channels behind it
+    var LAD = "Consensus ladder", agg = {};
+    CSIGS.forEach(function (t) {
+      if (t.grp === LAD || !(state.bf || t.source !== "backfill") || !inPeriod(tOf(t, "posted_at")) || !sideOK(t.side)) return;
+      var r = null, ls = (CLEG_BY[t.id] || []).filter(function (l) { return l.status === "closed" && l.r_multiple != null; });
+      if (ls.length) r = sum(ls.map(function (l) { return l.r_multiple; }));
+      else if (t.meta && t.meta.as_if && t.meta.as_if.r != null) r = t.meta.as_if.r;
+      if (r == null) return;
+      (supporters(t.id) || []).forEach(function (g) {
+        var a = agg[g] || (agg[g] = { n: 0, w: 0, r: 0 });
+        a.n++; a.w += r > 0.05 ? 1 : 0; a.r += r;
+      });
+    });
+    var drv = Object.keys(agg).filter(function (g) { return agg[g].n >= 3 && chanOK(g); }).sort(function (a, b) { return agg[b].r - agg[a].r; });
+    v.appendChild(block("Who drives the consensus", "Every consensus a channel agreed on (traded: the tracker’s result; not traded: as if traded), credited to each channel behind it. 3+ consensus. The filters above apply.",
+      drv.length ? table(["Channel", "Consensus", "Win rate", "Net R", "Average R"], drv.map(function (g) { var a = agg[g]; return [g, a.n, pct(a.w, a.n), rcell(a.r), rcell(a.r / a.n, 2)]; }),
+        { num: [1, 2, 3, 4], wrap: [0], cls: "compact" }) : empty("Not enough scored consensus in this period.")));
+  }
+
+  // ===== Stops & targets =====
+  function whatIf(legs, kind, levels) {   // dollars per 0.01 lot: a tighter stop or a smaller target, from each trade's MAE / MFE
+    var base = sum(legs.map(function (l) { return l.pnl_usd || 0; })), out = [];
+    levels.forEach(function (X) {
+      var tot = 0, wins = 0, changed = 0;
+      legs.forEach(function (l) {
+        var mae = (l.mae_pips || 0) / 10, mfe = (l.mfe_pips || 0) / 10, c = l.cost_usd || 0, p = l.pnl_usd || 0;
+        if (kind === "stop" && mae >= X - 1e-9 && p > -X) { p = -X - c; changed++; }
+        else if (kind === "tp" && mfe >= X - 1e-9 && p < X) { p = X - c; changed++; }
+        tot += p; wins += p > 0 ? 1 : 0;
+      });
+      out.push([(kind === "stop" ? "Stop $" : "Target $") + X, changed, pct(wins, legs.length), ucell(tot), ucell(tot - base)]);
+    });
+    return { base: base, rows: out };
+  }
+  function anStops(v) {
+    var LAD = "Consensus ladder";
+    var cl = cpool().filter(function (l) { return l.grp !== LAD && l.status === "closed" && l.pnl_usd != null && l.mae_pips != null; });
+    var ch = pool().filter(isScored).filter(function (t) { return t.status === "closed" && (t.leg || 1) === 1 && t.mae_pips != null && t.r_multiple != null; });
+    v.appendChild(el("p", { cls: "note", style: "margin:0 0 12px;max-width:85ch", text: "How far trades went against us before they ended (MAE) and how far in our favour (MFE), from the tracker’s minute prices. $1 of gold’s price = $1 per 0.01 lot. The filters above apply." }));
+    if (cl.length) {
+      var w = cl.filter(function (l) { return l.result === "win"; }).length;
+      var st = whatIf(cl, "stop", [3, 5, 7.5]), tp = whatIf(cl, "tp", [2, 3, 4]);
+      v.appendChild(block("Consensus: what if the stop or the target were different", "Today: the $10 stop and TP1 (at least $5). " + plural(cl.length, "closed consensus trade") + ", " + pct(w, cl.length) + " won, " + usd(st.base) + " per 0.01 lot. " +
+        "A tighter stop turns every trade that went that far against us into a loss of that size (winners included); a smaller target turns every trade that went that far our way into a win of that size. Only tighter / smaller levels can be worked out: the prices beyond today’s stop and target aren’t known.",
+        el("div", { cls: "grid2", style: "margin-top:0" }, [
+          table(["Stop", "Trades changed", "Win rate", "Net (0.01 lots)", "vs today"], st.rows, { num: [1, 2, 3, 4], cls: "compact" }),
+          table(["Target", "Trades changed", "Win rate", "Net (0.01 lots)", "vs today"], tp.rows, { num: [1, 2, 3, 4], cls: "compact" })])));
+    }
+    var thresholds = function (rows, key, sel, levels) {
+      var r = rows.filter(sel);
+      return levels.map(function (X) { var k = r.filter(function (t) { return (t[key] || 0) / 10 >= X - 1e-9; }).length; return ["$" + X, k, pct(k, r.length)]; });
+    };
+    var win = function (t) { return t.result === "win"; }, loss = function (t) { return t.result === "loss"; };
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("Winners: how far against first", "Of the winning trades, how many went at least this far against us before winning (a stop that size would have lost them). Consensus | all channels’ TP1.",
+        table(["Against", "Consensus", "Share", "Channels", "Share"], [2, 3, 5, 7.5, 10].map(function (X, i) {
+          var a = thresholds(cl, "mae_pips", win, [X])[0], b = thresholds(ch, "mae_pips", win, [X])[0];
+          return [a[0], a[1], a[2], b[1], b[2]];
+        }), { num: [1, 2, 3, 4], cls: "compact" })),
+      block("Losers: how far in our favour first", "Of the losing trades, how many were at least this far in profit before turning (a target or lock that size would have saved them).",
+        table(["In favour", "Consensus", "Share", "Channels", "Share"], [1, 2, 3, 4, 5].map(function (X) {
+          var a = thresholds(cl, "mfe_pips", loss, [X])[0], b = thresholds(ch, "mfe_pips", loss, [X])[0];
+          return [a[0], a[1], a[2], b[1], b[2]];
+        }), { num: [1, 2, 3, 4], cls: "compact" }))]));
+    var buckets = [["≤ −1R", -1e9, -0.999], ["−1 to −0.5R", -0.999, -0.5], ["−0.5 to 0", -0.5, 0], ["0 to 0.5R", 0, 0.5], ["0.5 to 1R", 0.5, 1], ["1 to 2R", 1, 2], ["2R +", 2, 1e9]];
+    var hist = function (rows) { return buckets.map(function (b) { var n = rows.filter(function (t) { return t.r_multiple > b[1] && t.r_multiple <= b[2] || (b[1] === -1e9 && t.r_multiple <= b[2]); }).length; return { label: b[0], value: n, n: n }; }); };
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("Consensus: spread of results", "Closed consensus trades by R.", el("div", { cls: "panel" }, [chart(function (W) { return columns(hist(cl), { showValues: true, label: "Consensus R distribution" }, W); })])),
+      block("All channels: spread of results", "Closed TP1 positions by R.", el("div", { cls: "panel" }, [chart(function (W) { return columns(hist(ch), { showValues: true, label: "Channels R distribution" }, W); })]))]));
+    var tb = [["Under 15 min", 0, 15], ["15–60 min", 15, 60], ["1–4 h", 60, 240], ["4–24 h", 240, 1440], ["Over a day", 1440, 1e9]];
+    var timeTable = function (rows) {
+      return table(["Time in trade", "Trades", "Win rate", "Avg R"], tb.map(function (b) {
+        var r = rows.filter(function (t) { return t.minutes_in_trade != null && t.minutes_in_trade >= b[1] && t.minutes_in_trade < b[2]; });
+        return [b[0], r.length, pct(r.filter(win).length, r.length), r.length ? signed(sum(r.map(function (t) { return t.r_multiple || 0; })) / r.length, 2) : "–"];
+      }), { num: [1, 2, 3], cls: "compact" });
+    };
+    var mw = cl.filter(win).map(function (t) { return t.minutes_in_trade; }).filter(function (x) { return x != null; }), ml = cl.filter(loss).map(function (t) { return t.minutes_in_trade; }).filter(function (x) { return x != null; });
+    v.appendChild(el("div", { cls: "grid2" }, [
+      block("Consensus: time in trade", "Median: winners " + (mw.length ? dur(median(mw)) : "–") + ", losers " + (ml.length ? dur(median(ml)) : "–") + ".", timeTable(cl)),
+      block("All channels: time in trade", "TP1 positions.", timeTable(ch))]));
+  }
+
+  function anSignals(v) {   // every channel's signals pooled, in R (the Analytics tab before 23 Nov 2026)
     var rows = pool(), closed = rows.filter(isScored).filter(function (t) { return t.status === "closed"; });
     v.appendChild(scopeLine());
     if (!closed.length) { v.appendChild(empty(fx().any ? "No closed positions match the filters above." : "Analytics appear once positions close. Tick Include backfill to explore the last two weeks.")); return; }
