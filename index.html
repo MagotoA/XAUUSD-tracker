@@ -1377,7 +1377,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       return n.length === cur.length - gone.length && n.every(function (g) { return cur.indexOf(g) >= 0; });   // ticks = the picks in the list
     };
     var msg = el("p", { cls: "note", style: "margin:8px 0" });
-    var apply = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply in Telegram"]);
+    // two "Apply in Telegram" buttons on the Settings tab confused (23 Nov 2026, Arnold: "the apply in telegram appears
+    // twice"): this one sends the channel picks only, and says so
+    var apply = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply channel picks in Telegram"]);
     var back = el("button", { type: "button", cls: "link", style: "font-size:16px;margin-left:24px" }, ["Back to the ranking"]);
     var none = el("button", { type: "button", cls: "link", style: "margin-left:24px" }, ["Untick all"]);
     var boxes = [];
@@ -1385,13 +1387,14 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     function update() {
       var n = names();
       savePick50(key, T.fp, same() ? null : want);
+      if (tgt && tgt.onDraft) tgt.onDraft(!same() || gone.length > 0, n);   // the settings panel warns about unsent ticks
       reset.disabled = same();
       apply.disabled = (same() && !gone.length) || !bot;   // a pick that left the top 50 is dropped by applying
       back.disabled = !cur.length || !bot;
       msg.textContent = !bot ? "The tracker’s bot isn’t running, so picks can’t be sent yet." :
         same() && !gone.length ? (cur.length ? "These are the channels picked now for " + who + ". Tick or untick to change them." : "Nothing picked for " + who + ": Best of 10 follows last week’s ranking. Tick channels to copy only those.") :
-        n.length ? who + ": " + n.length + " ticked: " + n.join(", ") + ". Telegram opens with them; tap Start, then Apply." :
-        who + ": nothing ticked, applying goes back to last week’s ranking. Telegram opens; tap Start, then Apply.";
+        n.length ? who + ": " + n.length + " ticked, NOT sent yet: " + n.join(", ") + ". Press “Apply channel picks in Telegram”, then Start and Apply in the bot." :
+        who + ": nothing ticked, NOT sent yet: applying goes back to last week’s ranking. Press “Apply channel picks in Telegram”, then Start and Apply.";
     }
     // (23 Nov 2026, Arnold: "Table needs more columns. We had win rate | score | Note columns. Ranking to use score so as
     // to match criteria for best of 10. We still maintain the list of Top 50"): the same top 50, ordered by Best of 10's
@@ -1455,7 +1458,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     return block(tgt ? "Best of 10: pick channels for " + tgt.label + " (this week’s top 50)" : "Pick channels to copy (this week’s top 50)",
       "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "), ordered by Best of 10’s score: net R × win rate on every TP, " + (B.scores_basis || "last week") +
       (SC && Object.keys(SC).length ? "" : " (not worked out yet: the Sandbox shows it after its next pass)") + "; “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi. Channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") come first. " +
-      "Tick the channels Best of 10 should copy " + (tgt ? "on " + tgt.label : "on the Sandbox") + " and press “Apply in Telegram”: from then on only the ticked channels are copied, whatever their ranking, the channel rules (Blacklisted / Muted) or the mid-week pause. " +
+      "Tick the channels Best of 10 should copy " + (tgt ? "on " + tgt.label : "on the Sandbox") + " and press “Apply channel picks in Telegram”" + (tgt ? " (this list’s own button: the settings’ button above doesn’t send picks)" : "") + ": from then on only the ticked channels are copied, whatever their ranking, the channel rules (Blacklisted / Muted) or the mid-week pause. " +
       "“Back to the ranking” clears the picks. " + now,
       el("div", null, [panel, table(["Copy", "#", "Channel", "Last wk R", "Last wk win", "Last wk sig.", "Score", "This wk R", "This wk win", "This wk sig.", "28-day R", "Votes", "Note"], body,
         { num: [1, 3, 4, 5, 6, 7, 8, 9, 10], wrap: [12] })]));   // the buttons above the 50 rows
@@ -2224,11 +2227,20 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       (a.updated ? " Reported " + when(a.updated) + "." : ""),
       el("div", { cls: "scroll" }, [el("table", { cls: "psettings pgrid" }, [cols([16, 19, 17, 19, 29]), el("thead", null, [el("tr", null,
         ["Setting", "Consensus", "Ladder", "Best of 10", "What it does"].map(function (h) { return el("th", { scope: "col", text: h }); }))]), sb])])));
-    var msg = el("p", { cls: "note", style: "margin:8px 0" }), btn = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply in Telegram"]);
+    var msg = el("p", { cls: "note", style: "margin:8px 0" }), btn = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply settings in Telegram"]);
+    var pickWarn = el("p", { cls: "note", style: "margin:6px 0;color:var(--loss);font-weight:600;display:none" });
+    var pickDirty = false, nPicked = 0, settingsReady = false;
     var pickBlock = null;   // Best of 10's channels picked by hand for this account (23 Nov 2026), below the settings' buttons
     if (DATA.top50 && (DATA.top50.rows || []).length) {
       var ap = (DATA.top50.accounts || {})[sec] || {};
-      pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], changed_by: ap.changed_by, changed_at: ap.changed_at, on: !!cur.best10 });
+      nPicked = (ap.picked || []).length;
+      pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], changed_by: ap.changed_by, changed_at: ap.changed_at, on: !!cur.best10,
+        onDraft: function (dirty, n) {
+          pickDirty = dirty;
+          pickWarn.style.display = dirty ? "" : "none";
+          pickWarn.textContent = dirty ? "Channel picks ticked below are NOT sent by this button (" + n.length + " ticked): send them with “Apply channel picks in Telegram” in the list below, then Start and Apply in the bot." : "";
+          if (settingsReady) update();   // not while this list is being built: the panel isn't there yet
+        } });
     }
     var changedKeys = function () {
       return FIELDS.filter(function (f) { var k = f[0];
@@ -2256,9 +2268,11 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var riskCap = +((a.portal.defaults || {}).max_risk) || 100;
       if (ch.indexOf("max_risk") >= 0 && !(+want.max_risk >= 1 && +want.max_risk <= riskCap)) bad.push("Max risk per order must be 1 – " + riskCap + "%" + (riskCap < 100 ? " (the admin’s cap: it can be lowered, not raised)." : "."));
       btn.disabled = !ch.length || bad.length > 0 || !bot;
+      var b10warn = ch.indexOf("best10") >= 0 && want.best10 && !nPicked && !pickDirty ?
+        " Best of 10 has no channels picked for " + a.label + ": it will copy last week’s ranking. To copy only your own channels, pick and send them in the list below FIRST." : "";
       msg.textContent = bad.length ? bad.join(" ") : !ch.length ? "Change a setting above to apply it to " + a.label + "." :
         !bot ? "The tracker’s bot isn’t running, so changes can’t be sent yet." :
-        a.label + ": " + ch.map(function (k) { return FBY[k][3]; }).join(", ") + ". Telegram opens with them; tap Start, then Apply.";
+        a.label + ": " + ch.map(function (k) { return FBY[k][3]; }).join(", ") + ". Telegram opens with them; tap Start, then Apply." + b10warn;
     }
     btn.addEventListener("click", function () {
       var vals = {}; changedKeys().forEach(function (k) { vals[k] = want[k]; });
@@ -2275,8 +2289,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var rnote = el("p", { cls: "note", style: "margin:4px 0 8px" }, [resettable.length || npick
       ? "Reset to defaults: every setting changed here for " + a.label + " goes back to config.ini (" + resettable.length + " now)" + (npick ? " and Best of 10’s " + npick + " picked channels are cleared" : "") + ". Trading on/pause stays as it is. Confirm in Telegram."
       : "Reset to defaults: nothing to reset, " + a.label + " already uses the default settings."]);
-    v.appendChild(el("div", { cls: "panel" }, [btn, rbtn, msg, rnote,
+    v.appendChild(el("div", { cls: "panel" }, [btn, rbtn, msg, pickWarn, rnote,
       el("p", { cls: "note", text: "First time? Send /start to " + (bot ? "@" + bot : "the tracker’s bot") + " in Telegram; the admin links you to your account. In Telegram you can also use /settings, /pause, /resume and /reset." })]));
+    settingsReady = true;
     update();
     if (pickBlock) v.appendChild(el("div", { style: "margin-top:18px" }, [pickBlock]));
   }
