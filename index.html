@@ -2043,6 +2043,13 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     // 23 Nov 2026 (Arnold: "This is not accurate"): every TP by default, as Best of 10 trades and ranks (TP1 only
     // understated channels whose later TPs hit: GOLD ANALYSIS EXPERT's week of 16 Nov was +2.1R on TP1, +21.0R on every TP)
     var tp1 = state.atp === "tp1";
+    // 24 Nov 2026 (Arnold: "Doesn't look accurate. Star trading and killer have been trading with no results here"): the
+    // Session filter was on London + New York, which left out every Asia signal, and the table didn't say so
+    var fl = fx(), fdesc = [], fclear = [];
+    if (fl.sess) { fdesc.push("the " + fl.sess + " session only (posted " + SESS_NBO_SHORT[fl.sess] + " Nairobi)"); fclear.push("Session: All sessions"); }
+    if (fl.side) { fdesc.push(fl.side === "buy" ? "buys only" : "sells only"); fclear.push("Buy or sell: Buys and sells"); }
+    var ftext = fdesc.length ? "Filtered: " + fdesc.join(", ") + ". Signals outside it are left out of every cell (" + fclear.join(", ") +
+      " in the filter bar shows them all). " : "";
     v.appendChild(el("div", { cls: "seg", role: "group", "aria-label": "Which TPs", style: "margin-bottom:10px" }, [["", "Every TP (how Best of 10 trades)"], ["tp1", "TP1 only (one position per signal)"]].map(function (o) {
       var on = (o[0] === "tp1") === tp1;
       return el("button", { type: "button", cls: "segb" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false", on: { click: function () { go({ atp: o[0] }, true); } } }, [o[1]]);
@@ -2077,15 +2084,16 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         var x = c.n[k] ? c.w[k] : null;
         var ns = c.s[k] ? Object.keys(c.s[k]).length : 0;
         return el("td", { cls: "num", style: cellStyle(x), title: x == null ? (state.bf || k > 0 ? "no closed signals" : "no closed live signals (tick Include backfill for the weeks before 9 Nov)")
+          + (fdesc.length ? " in " + fdesc.join(", ") : "")
           : ns + " signal" + (ns === 1 ? "" : "s") + (tp1 ? "" : ", " + c.n[k] + " TP position" + (c.n[k] === 1 ? "" : "s")) + " closed", text: x == null ? "·" : signed(x, 1) });
       })).concat([el("td", { cls: "num" }, [rcell(tot(g, 0, W - 1))]), el("td", { cls: "num", text: up + "/" + act }),
         el("td", { cls: "num " + (tr == null ? "" : tr > 0.05 ? "win" : tr < -0.05 ? "loss" : ""), text: tr == null ? "–" : (tr > 0.05 ? "▲ " : tr < -0.05 ? "▼ " : "") + signed(tr, 1) })]));
     });
-    v.appendChild(block("Week by week, per channel", (tp1 ? "TP1 R per week (one position per signal" : "Net R per week on every TP the signals listed (one position per TP, the way Best of 10 trades and ranks them") +
+    v.appendChild(block("Week by week, per channel", ftext + (tp1 ? "TP1 R per week (one position per signal" : "Net R per week on every TP the signals listed (one position per TP, the way Best of 10 trades and ranks them") +
       ", the tracker’s scoring after costs; by the week the signal was posted; a channel that posts a signal twice counts twice, as in the ranking), the last 8 weeks" + (DATA.top50 ? ", this week’s consensus top 50" : "") +
       ". Green = a winning week, red = a losing one. “Weeks up”: winning weeks of the weeks it had signals; “Trend”: the last two full weeks against the two before (– until both have signals). A channel up most weeks is steadier than one with a single big week." +
       (state.bf ? "" : " Live logging started 9 Nov: tick Include backfill for the weeks before."),
-      body.length ? el("div", { cls: "scroll" }, [el("table", { cls: "compact" }, [el("thead", null, [head]), el("tbody", null, body)])]) : empty("No closed signals in the last 8 weeks.")));
+      body.length ? el("div", { cls: "scroll" }, [el("table", { cls: "compact" }, [el("thead", null, [head]), el("tbody", null, body)])]) : empty("No closed signals in the last 8 weeks" + (fdesc.length ? " in " + fdesc.join(", ") : "") + ".")));
     var trendOf = names.map(function (g) { return { g: g, d: trendOf1(g), now: tot(g, W - 3, W - 2) }; }).filter(function (x) { return x.d != null; });
     var upL = trendOf.filter(function (x) { return x.d > 0; }).sort(function (a, b) { return b.d - a.d; }).slice(0, 8);
     var dnL = trendOf.filter(function (x) { return x.d < 0; }).sort(function (a, b) { return a.d - b.d; }).slice(0, 8);
@@ -2300,6 +2308,33 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       ((nw.upcoming || []).length ? " Next: " + nw.upcoming.map(function (e) { return e.title + " " + when(e.at); }).join("; ") + "." : " No high-impact US event ahead this week."),
       lg.length ? table(["Time", "Event", "Account", "Position", "Then", "Action"], lg.map(function (r) {
         return [when(r.at), r.event, (r.who || "") + " (" + r.login + ")", r.side + " " + r.volume + " @ " + r.open, el("span", { cls: r.per_oz > 0 ? "win" : r.per_oz < 0 ? "loss" : "", text: signed(r.usd, 2) + " (" + signed(r.per_oz, 2) + "/oz)" }), r.action + (r.mode === "shadow" ? " (shadow)" : "")]; }), { wrap: [1], cls: "compact" }) : empty("No position was open before an event yet.")));
+    // the Market Regime Analyst (24 Nov 2026): informational
+    var rgm = a.regime;
+    if (rgm) {
+      var rn = rgm.now || {}, rs = (rgm.stats || {}).by || {};
+      var trendTxt = { up: "Trending up", down: "Trending down", range: "Ranging" }[rn.trend] || "–";
+      var stRows = [["with_trend", "With the 24 h trend"], ["against", "Against a strong trend"], ["ranging", "In a ranging market"], ["volatile", "Volatile hours"], ["calm", "Calm hours"]]
+        .filter(function (k) { return rs[k[0]] && rs[k[0]].n; }).map(function (k) { var x = rs[k[0]]; return [k[1], x.n, pct(x.won, x.n), ucell(x.usd, 0), ucell(x.usd / x.n, 2)]; });
+      v.appendChild(block("Market regime", "What kind of market gold is in, from the tracker’s prices on hourly bars, every 15 minutes: trend = the last 24 hours’ move and how straight it was (efficiency: 1 = a straight line, 0 = back where it started; " +
+        ((rgm.settings || {}).er_trend || 0.35) + "+ = trending), volatility = the last 24 hours’ average hourly range against its 20-day median. Informational only: no order is blocked by it. " +
+        "The paper test (31 Aug – 23 Nov) found skipping signals against a strong trend didn’t reliably help, so it keeps being measured instead (the daily audit scores the Sandbox’s Best of 10 signals by regime).",
+        el("div", null, [kpiRow([["Now", trendTxt], ["24 h move", rn.move != null ? signed(rn.move, 2) : "–"], ["Efficiency", rn.er != null ? fmt(rn.er, 2) : "–"],
+          ["Volatility", rn.vol_label ? rn.vol_label + " (" + fmt(rn.vol, 2) + "x)" : "–"], ["Since", rgm.since ? when(rgm.since) : "–"], ["Checked", rgm.at ? when(rgm.at) : "–"]]),
+          stRows.length ? table(["Best of 10’s signals (Optimizer’s replay, " + ((a.optimizer || {}).weeks || []).length + " weeks)", "Signals", "Won", "Net (0.01 lots)", "Per signal"], stRows, { num: [1, 2, 3, 4], cls: "compact" }) : null,
+          (rgm.changes || []).length ? el("p", { cls: "note", text: "Recent changes: " + rgm.changes.slice().reverse().map(function (c) { return when(c.at) + " " + c.trend + (c.vol_label ? ", " + c.vol_label : ""); }).join(" · ") }) : null])));
+    }
+    // the Strategy Optimizer (24 Nov 2026): proposals only
+    var op = a.optimizer;
+    v.appendChild(block("Strategy Optimizer (proposals only)", "Once a week (Saturday 03:00 Nairobi, markets closed; or /audit optimize in Telegram) it replays Best of 10 with the Sandbox’s settings over the last 8 complete weeks and tries ONE change at a time: channels copied, win floor, mid-week pause, chase limit, stop trailing. " +
+      "A change is proposed only when it made at least $50 / 10% more, did at least as well in both halves, and its worst drop is no more than 10% deeper. It never changes a setting: say “apply proposal N to the Sandbox” to try one there first. Not modelled: each account’s max open trades and loss limits, consensus and ladder, the per-account picks.",
+      !op ? empty("No run yet: the first is Saturday 03:00 Nairobi (or /audit optimize).") : el("div", null, [
+        kpiRow([["Run", when(op.at)], ["Weeks", (op.weeks || []).length ? dateOnly(new Date(Date.parse(op.weeks[0]) + 864e5).toISOString()) + " – " + dateOnly(new Date(Date.parse(op.weeks[op.weeks.length - 1]) + 7 * 864e5).toISOString()) : "–"],
+          ["Now", op.current ? usd(op.current.net, 0) : "–"], ["Worst drop", op.current ? usd(-op.current.dd, 0) : "–"], ["Weeks up", op.current ? op.current.up + " of " + (op.weeks || []).length : "–"]]),
+        (op.proposals || []).length ? table(["Proposal", "Net", "Change", "Worst drop", "Weeks up"], op.proposals.map(function (r, i) {
+          return [(i + 1) + ". " + r.label, ucell(r.net, 0), ucell(r.delta, 0), usd(-r.dd, 0), r.up + " of " + (op.weeks || []).length]; }), { num: [1, 2, 3, 4], wrap: [0], cls: "compact" })
+          : el("p", { cls: "note", text: "No change was clearly better: the current settings stay." }),
+        table(["Change tried", "Net", "vs now", "Worst drop", "Weeks up", "Verdict"], (op.tried || []).slice().sort(function (x, y) { return y.delta - x.delta; }).map(function (r) {
+          return [r.label, ucell(r.net, 0), ucell(r.delta, 0), usd(-r.dd, 0), r.up + " of " + (op.weeks || []).length, r.proposed ? "Proposed" : (r.why || []).join(", ")]; }), { num: [1, 2, 3, 4], wrap: [0, 5], cls: "compact" })])));
     // the Auditor
     if (au) {
       var names2 = { consensus: "Consensus", ladder: "Ladder", best10: "Best of 10" };
@@ -2727,18 +2762,21 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["ladder_early", "G", "bool", "Ladder early exit", "Close the ladder if price rushes against it right after its fill (the consensus’s amount and minutes). Off on the demo."],
     ["ladder_lock", "U", "bool", "Ladder profit lock", "Move the ladder’s stop into profit once it is close to its TP (the demo’s rule)."],
     ["ladder_news", "V", "int", "Ladder news filter (min)", "No ladder order this many minutes either side of high-impact US news. Not set = the consensus’s. 0 = off."],
-    ["best10_news", "Y", "int", "Best of 10 news filter (min)", "No Best of 10 order this many minutes either side of high-impact US news. Not set = the consensus’s. 0 = off."]];
+    ["best10_news", "Y", "int", "Best of 10 news filter (min)", "No Best of 10 order this many minutes either side of high-impact US news. Not set = the consensus’s. 0 = off."],
+    // 24 Nov 2026 (Arnold: "account wide regardless of strategy ... a resume button for anyone who wants to trade. Default is pause")
+    ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 15:45 – 18:15 Nairobi (07:45 – 10:15 New York: US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."]];
   // the Settings tab's layout (23 Nov 2026, Arnold's sheet: "The settings tab..should appear in a similar format.
   // Reorganise/group appropriately"; chose "Layout now, new rules next"): General = the whole account, Live 1 / 2 / 3
   // side by side (the chosen account's column can be changed); then one grid with a column per strategy for the chosen
   // account. The same settings and Telegram links as before; a cell with no setting of its own says what applies there.
-  var PGEN = ["trading", "max_open", "max_risk", "day_limit", "week_limit", "max_delay"];
+  var PGEN = ["trading", "max_open", "max_risk", "day_limit", "week_limit", "max_delay", "ny_pause"];
   var PGEN_TIP = { trading: "New orders on, or paused, for every strategy on the account (open trades keep their stop and target).",
     max_open: "Open plus waiting orders at once, every strategy together (a Best of 10 signal opens one position per TP, as many as fit). 1 – 20.",
     max_risk: "No single order or position can lose more than this share of the balance at its stop: a bigger one is cut down to the largest size that fits. Can be lowered here, not raised above the admin’s cap.",
     day_limit: "No new orders from any strategy once the day’s loss (closed + open, all strategies) reaches this. 5 – 50.",
     week_limit: "0 = off. No new order from any strategy if the week could lose more than this. 0 – 80.",
-    max_delay: "No order (any strategy) if the signal is older than this when it reaches the account. 1 – 10." };
+    max_delay: "No order (any strategy) if the signal is older than this when it reaches the account. 1 – 10.",
+    ny_pause: "No new orders from any strategy 15:45 – 18:15 Nairobi (07:45 – 10:15 New York: US data and the New York open), so the market can settle. On by default; switch it off to trade through it." };
   function fixedOf(a) { return (a && a.fixed) || {}; }
   // a strategy grid row: [label, what it does, consensus, ladder, best of 10, span]; a cell is a setting's key (its
   // control), or a function (account) -> text for a cell with no setting of its own; span 3 / 2 = the first cell is
