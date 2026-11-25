@@ -2764,7 +2764,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["ladder_news", "V", "int", "Ladder news filter (min)", "No ladder order this many minutes either side of high-impact US news. Not set = the consensus’s. 0 = off."],
     ["best10_news", "Y", "int", "Best of 10 news filter (min)", "No Best of 10 order this many minutes either side of high-impact US news. Not set = the consensus’s. 0 = off."],
     // 24 Nov 2026 (Arnold: "account wide regardless of strategy ... a resume button for anyone who wants to trade. Default is pause")
-    ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 15:45 – 18:15 Nairobi (07:45 – 10:15 New York: US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."]];
+    ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 13:00 – 18:00 Nairobi (05:00 – 10:00 New York: London afternoon, US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."]];
   // the Settings tab's layout (23 Nov 2026, Arnold's sheet: "The settings tab..should appear in a similar format.
   // Reorganise/group appropriately"; chose "Layout now, new rules next"): General = the whole account, Live 1 / 2 / 3
   // side by side (the chosen account's column can be changed); then one grid with a column per strategy for the chosen
@@ -2776,7 +2776,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     day_limit: "No new orders from any strategy once the day’s loss (closed + open, all strategies) reaches this. 5 – 50.",
     week_limit: "0 = off. No new order from any strategy if the week could lose more than this. 0 – 80.",
     max_delay: "No order (any strategy) if the signal is older than this when it reaches the account. 1 – 10.",
-    ny_pause: "No new orders from any strategy 15:45 – 18:15 Nairobi (07:45 – 10:15 New York: US data and the New York open), so the market can settle. On by default; switch it off to trade through it." };
+    ny_pause: "No new orders from any strategy 13:00 – 18:00 Nairobi (05:00 – 10:00 New York: London afternoon, US data and the New York open), so the market can settle. On by default; switch it off to trade through it." };
   function fixedOf(a) { return (a && a.fixed) || {}; }
   // a strategy grid row: [label, what it does, consensus, ladder, best of 10, span]; a cell is a setting's key (its
   // control), or a function (account) -> text for a cell with no setting of its own; span 3 / 2 = the first cell is
