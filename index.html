@@ -3162,7 +3162,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     // 26 Nov 2026 (Arnold: "Okay"): the mid-week pause and the channel rules on hand-picked channels, with top-10 stand-ins
     ["best10_rules", "X", "bool", "Safety rules on picked channels", "On (default): a picked channel that is paused (under 50% of its 6+ positions won this week; back at 65%) or muted / blacklisted for deleting signals is not copied, and the best free channel of this week’s top 10 stands in until it is back. Off: picked channels are copied whatever."],
     // 24 Nov 2026 (Arnold: "account wide regardless of strategy ... a resume button for anyone who wants to trade. Default is pause")
-    ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 13:00 – 18:00 Nairobi (05:00 – 10:00 New York: London afternoon, US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."]];
+    ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 13:00 – 18:00 Nairobi (05:00 – 10:00 New York: London afternoon, US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."],
+    // 26 Nov 2026 (owner: "Yes, add it"): Best of 10's limit per channel; code "Mc" (every capital letter is taken)
+    ["best10_max_per_channel", "Mc", "int", "Max open per channel", "Best of 10: at most this many positions and waiting orders from any one channel at once; a new signal takes only the room left, nearest TPs first. 0 = no limit. 0 – 20. The account’s Max open trades still applies on top."]];
   // the Settings tab's layout (23 Nov 2026, Arnold's sheet: "The settings tab..should appear in a similar format.
   // Reorganise/group appropriately"; chose "Layout now, new rules next"): General = the whole account, Live 1 / 2 / 3
   // side by side (the chosen account's column can be changed); then one grid with a column per strategy for the chosen
@@ -3185,6 +3187,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       "lots", "ladder_lots", "best10_lots"],
     ["Channels to copy", "Consensus: this week’s voting channels; 2 or more must agree. Best of 10: how many of last week’s best channels it copies, 1 – 10 (a change re-ranks the week at once).",
       function () { return "Voting channels (2+ agree)"; }, function () { return "Follows the consensus"; }, "best10_top"],
+    ["Max open per channel", "Best of 10: at most this many positions and waiting orders from one channel at once (a signal with more TPs than the room left copies the nearest TPs). 0 = no limit, 0 – 20. Max open trades (Account, above) still caps the whole account. Consensus and ladder: one trade per consensus.",
+      function () { return "One per consensus"; }, function () { return "One per consensus"; }, "best10_max_per_channel"],
     ["Manually selected channels", "Channels picked by hand for Best of 10 from this week’s top 50 (the list below the table), copied whatever their ranking; the mid-week pause and the channel rules apply unless the next row is off. None = last week’s ranking.",
       function () { return "–"; }, function () { return "–"; }, function (a) {
         var p = ((DATA.top50 || {}).accounts || {})[a.section] || {}, n = (p.picked || []).length;
@@ -3210,6 +3214,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (x === true || x === false) return key === "trading" ? (x ? "on" : "paused") : (x ? "on" : "off");
     if (key === "lots" || key === "best10_lots" || key === "ladder_lots") return x === "auto" ? "auto" : x === "rule" ? "config.ini’s lot rule" : String(+x);
     if (key === "stop_usd" || key === "ladder_stop") return "$" + (+x);
+    if (key === "best10_max_per_channel" && !+x) return "no limit";
     var mins = ["news_min", "ladder_news", "best10_news", "cooldown_min", "max_delay"];
     if ((key === "week_limit" || key === "max_risk" || mins.indexOf(key) >= 0 && key !== "max_delay") && !+x) return "off";
     if (key === "day_limit" || key === "week_limit" || key === "max_risk") return (+x) + "%";
@@ -3261,7 +3266,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if ("max_open" in cur) glance.push(["Max open", cur.max_open]);
     if ("max_risk" in cur) glance.push(["Risk per order", cur.max_risk + "%"]);
     if ("day_limit" in cur) glance.push(["Daily loss limit", cur.day_limit + "%"]);
-    if ("best10_max_per_channel" in cur) glance.push(["Per channel", cur.best10_max_per_channel || "No cap"]);
+    if ("best10_max_per_channel" in cur) glance.push(["Per channel", cur.best10_max_per_channel || "No limit"]);
     glance.push(["Best of 10", b10Now]);
     v.appendChild(kpiRow(glance));
     var JUMPS = [["set-acct", "Account"], ["set-strat", "Strategies"], ["set-b10", "Best of 10 channels"], ["set-help", "Reset & help"]];
