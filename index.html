@@ -142,6 +142,57 @@ ol.board button:focus-visible { outline: 2px solid var(--gold); outline-offset: 
 .sesb.on { background: var(--gold-soft); border-color: var(--gold); color: var(--ink); font-weight: 600; }
 .sesb:disabled { cursor: default; opacity: .55; }
 .sesb .win, .sesb .loss { font-weight: 600; }
+/* Settings tab and Best of 10 channel builder (26 Nov 2026 revamp): tabs with state, switches, changed-value highlight,
+   chips for the summary, a filterable list and one sticky bar for what isn't sent yet */
+.segb.small { font-size: 13px; padding: 4px 11px; }
+.acctseg .segb { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; }
+.acctseg .segb .sub { font-size: 12px; font-weight: 400; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--win); flex: none; }
+.dot.off { background: var(--loss); }
+.jump { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; margin: -4px 0 6px; font-size: 14px; }
+section.block[id] { scroll-margin-top: 12px; }
+td.chg { background: var(--gold-soft); box-shadow: inset 3px 0 0 var(--gold); }
+input.switch { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 10px; background: var(--rule-strong); position: relative; cursor: pointer; vertical-align: -5px; margin: 0; transition: background .15s; }
+input.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: left .15s; }
+input.switch:checked { background: var(--gold); }
+input.switch:checked::after { left: 16px; }
+input.switch:disabled { opacity: .5; cursor: not-allowed; }
+input.switch:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.swl { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; margin: 0 5px 5px 0; border-radius: 12px; background: var(--chip); font-size: 13px; }
+.chip.add { background: var(--gold-soft); color: var(--ink); font-weight: 600; }
+.chip.never { background: var(--loss-soft); color: var(--loss); }
+.chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 3px; opacity: .7; }
+.chip button:hover { opacity: 1; }
+.tool { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 10px; }
+.tool input[type=search] { font: inherit; font-size: 14px; padding: 6px 10px; min-width: min(100%, 220px); border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--surface); color: var(--ink); }
+table.b10t.lite .more { display: none; }
+table.b10t td.acts { white-space: nowrap; }
+table.b10t tr.in td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+table.b10t tr.never td { opacity: .55; }
+table.b10t tr.never td:first-child { opacity: 1; box-shadow: inset 3px 0 0 var(--loss); }
+.sesb.act { min-width: 74px; }
+.sesb.never.on { background: var(--loss-soft); border-color: var(--loss); color: var(--loss); font-weight: 600; }
+.btnp { font: inherit; font-size: 14px; font-weight: 600; padding: 7px 16px; border-radius: 8px; border: 1px solid var(--gold); background: var(--gold); color: var(--surface); cursor: pointer; white-space: nowrap; }
+.btns { font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap; }
+.btnp:disabled, .btns:disabled { opacity: .45; cursor: default; }
+.savebar { position: sticky; bottom: 8px; z-index: 5; margin-top: 18px; display: grid; gap: 8px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--rule-strong); background: var(--surface); box-shadow: 0 4px 18px rgba(0, 0, 0, .12); }
+.savebar.dirty { border-color: var(--gold); }
+.savebar .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.savebar .what { flex: 1 1 260px; font-size: 14px; color: var(--muted); }
+.savebar .what.dirty { color: var(--ink); font-weight: 600; }
+.savebar .what.bad { color: var(--loss); font-weight: 600; }
+.savebar:not(.dirty) { gap: 2px; padding: 6px 14px; box-shadow: none; }   /* nothing to send: a slim status line */
+.savebar:not(.dirty) .btnp, .savebar:not(.dirty) .btns, .savebar:not(.dirty) .hint { display: none; }
+.savebar:not(.dirty) .what { font-size: 13px; }
+.savebar.dirty .row.clean { display: none; }
+@media (max-width: 640px) {
+  .savebar .row { flex-wrap: nowrap; }
+  .savebar .what { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+  .savebar .hint .note { display: none; }
+  .savebar .hint { justify-content: flex-end; }
+  .btnp, .btns { padding: 6px 11px; font-size: 13px; }
+}
 .bars .row { display: grid; grid-template-columns: minmax(96px, 150px) 1fr 76px; gap: 10px; align-items: center; font-size: 14px; }
 .bars .lab { overflow-wrap: anywhere; } .bars .lab small { color: var(--muted); display: block; font-size: 12px; }
 .bars .track { position: relative; height: 12px; background: var(--chip); border-radius: 3px; }
@@ -282,7 +333,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
              // the filter bar: period (fp, with ff/ft for chosen dates), channels (fc, one or more), side (fs), result (fr), strategy (fg)
              fp: p.get("fp") || "", ff: p.get("ff") || "", ft: p.get("ft") || "", fc: p.getAll("fc").filter(Boolean),
              fs: p.get("fs") || "", fr: p.get("fr") || "", fg: p.get("fg") || "",
-             fss: p.get("fss") || "", aa: p.get("aa") || "", ast: p.get("ast") || "" };   // session filter; Channel scorecard: top 50 or all (23 Nov 2026)
+             fss: p.get("fss") || "", aa: p.get("aa") || "", ast: p.get("ast") || "",   // session filter; Channel scorecard: top 50 or all (23 Nov 2026)
+             fb: p.get("fb") || "",   // fb: only the signals a Best of 10 copied (26 Nov 2026)
+             fl: p.get("fl") || "", fsty: p.get("fsty") || "", fac: p.get("fac") || "", fn: p.get("fn") || "" };   // the Channel finder's lookback, style, account, set size
     // links from before 18 Nov 2026: the History tab had its own channel, side and date filters
     if (!st.fc.length && p.get("hc")) st.fc = [p.get("hc")];
     if (!st.fs && p.get("hs")) st.fs = p.get("hs");
@@ -302,7 +355,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (state.fp) p.set("fp", state.fp);
     if (state.fp === "custom") { if (state.ff) p.set("ff", state.ff); if (state.ft) p.set("ft", state.ft); }
     state.fc.forEach(function (g) { p.append("fc", g); });
-    ["fs", "fr", "fg", "fss", "aa", "ast"].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
+    ["fs", "fr", "fg", "fss", "aa", "ast", "fb", "fl", "fsty", "fac", "fn"].forEach(function (k) { if (state[k]) p.set(k, state[k]); });
     if (state.om) p.set("om", String(state.om));
     if (state.la) p.set("la", String(state.la));
     if (state.sv) p.set("sv", state.sv);
@@ -445,9 +498,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function fx() {   // this render's filters, worked out once
     if (FX) return FX;
     var r = periodRange(state.fp);
-    FX = { from: r.from, to: r.to, chans: state.fc.length ? new Set(state.fc) : null, side: state.fs, res: state.fr, sess: SESS.indexOf(state.fss) >= 0 ? state.fss : "" };
+    FX = { from: r.from, to: r.to, chans: state.fc.length ? new Set(state.fc) : null, side: state.fs, res: state.fr, sess: SESS.indexOf(state.fss) >= 0 ? state.fss : "",
+           b10: b10Sources().some(function (x) { return x[0] === state.fb; }) ? state.fb : "" };
     FX.period = FX.from != null || FX.to != null;
-    FX.any = FX.period || !!FX.chans || !!FX.side || !!FX.res || !!FX.sess;
+    FX.any = FX.period || !!FX.chans || !!FX.side || !!FX.res || !!FX.sess || !!FX.b10;
     return FX;
   }
   function tOf(o, k) { var c = "_t_" + k; if (!(c in o)) o[c] = o[k] ? Date.parse(o[k]) : null; return o[c]; }   // parsed once
@@ -459,6 +513,49 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     return Array.isArray(g) ? g.some(function (x) { return c.has(x); }) : c.has(g);
   }
   function sideOK(x) { var f = fx(); return !f.side || x === f.side; }
+  // Best of 10 filter (26 Nov 2026, Arnold: "The analytics tab doesnt have a filter for Best of 10 (including stand ins) to
+  // ease analysis"): only the channel signals a Best of 10 actually copied: the Sandbox's (its ranked channels and the
+  // stand-ins that took a paused or muted one's place) or a live account's. Matched on the channel, the side and the time:
+  // the signal that became complete nearest its order (1 min before to 5 min after). Signals it skipped (paused, chase,
+  // no play left, removed at TP1) are left out. Its record on the page starts with the report's first trade.
+  var B10_SKIPPED = { "Paused": 1, "Not copied": 1, "Removed": 1, "Skipped": 1 };
+  function b10Sources() {   // [[key, label, trades]] for every Best of 10 with trades on the page
+    var out = [];
+    if (DATA.best10 && (DATA.best10.trades || []).length) out.push(["sb", "Best of 10, Sandbox (stand-ins included)", DATA.best10.trades]);
+    liveAccounts().forEach(function (a) {
+      var b = a.best10;
+      if (b && (b.trades || []).length && a.section) out.push([a.section, "Best of 10, " + (a.label || a.section), b.trades]);
+    });
+    return out;
+  }
+  var B10IX = {};
+  function b10Index(key) {   // {signal id: 1} of the channel signals that Best of 10 copied
+    if (B10IX[key]) return B10IX[key];
+    var src = b10Sources().filter(function (x) { return x[0] === key; })[0], ids = {}, by = {}, seen = {};
+    SIGS.forEach(function (s) { if (s.status !== "superseded" && s.status !== "incomplete") (by[s.grp] = by[s.grp] || []).push(s); });
+    ((src && src[2]) || []).forEach(function (x) {   // one row per TP: each order once
+      if (!x.grp || B10_SKIPPED[x.status] || seen[x.grp + "|" + x.at]) return;
+      seen[x.grp + "|" + x.at] = 1;
+      var t = Date.parse(x.at), best = null, bd = 0;
+      if (isNaN(t)) return;
+      (by[x.grp] || []).forEach(function (s) {   // the signal it was placed for: the nearest one, 1 min before to 5 min after
+        if (x.side && s.side && s.side !== x.side) return;
+        var ts = tOf(s, s.complete_at ? "complete_at" : "posted_at"), dt = t - ts;
+        if (ts == null || isNaN(ts) || dt < -60e3 || dt > 300e3) return;
+        var dist = Math.abs(dt - 30e3);   // orders usually go in within a few seconds to a minute
+        if (best == null || dist < bd) { best = s; bd = dist; }
+      });
+      if (best) ids[best.id] = 1;
+    });
+    B10IX[key] = ids;
+    return ids;
+  }
+  function b10From(key) {   // when that Best of 10's record on the page starts (ms)
+    var src = b10Sources().filter(function (x) { return x[0] === key; })[0], m = null;
+    ((src && src[2]) || []).forEach(function (x) { var t = Date.parse(x.at); if (!isNaN(t) && (m == null || t < m)) m = t; });
+    return m;
+  }
+  function b10OK(t) { var key = fx().b10; return !key || !!b10Index(key)[t.trade_id || t.id]; }
   // trading sessions (23 Nov 2026, Arnold: "In the analysis tab, we can have a filter for session and buys/sells"): London
   // time, as the tracker and the picks' session limits (Asia 22-07, London 07-12, London + New York 12-17, New York 17-22);
   // a signal's session is when the channel posted it (an order's: when it was placed)
@@ -496,8 +593,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     return "";
   }
   function stratOK(kind) { var g = stratFilter(); return !g || g === kind; }
-  function legOK(t, o) { return inPeriod(tOf(t, "posted_at")) && ((o && o.anyChannel) || chanOK(t.grp)) && sideOK(t.side) && sessOK(t) && resOK(legResult(t)); }
-  function sigOK(t, o) { return inPeriod(tOf(t, "posted_at")) && ((o && o.anyChannel) || chanOK(t.grp)) && sideOK(t.side) && sessOK(t); }
+  function legOK(t, o) { return inPeriod(tOf(t, "posted_at")) && ((o && o.anyChannel) || chanOK(t.grp)) && sideOK(t.side) && sessOK(t) && resOK(legResult(t)) && b10OK(t); }
+  function sigOK(t, o) { return inPeriod(tOf(t, "posted_at")) && ((o && o.anyChannel) || chanOK(t.grp)) && sideOK(t.side) && sessOK(t) && b10OK(t); }
   function cLegOK(t) {   // a consensus or ladder position: its channels are the ones that agreed
     return inPeriod(tOf(t, "posted_at")) && chanOK(supporters(t.trade_id || t.id)) && sideOK(t.side) && sessOK(t) && resOK(legResult(t)) &&
       stratOK(t.grp === "Consensus ladder" ? "ladder" : "consensus");
@@ -1389,8 +1486,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   var SESS_NBO_SHORT = { "Asia": "01:00–10:00", "London": "10:00–15:00", "London + New York": "15:00–20:00", "New York": "20:00–01:00" };
   var SESS_NBO = { "Asia": " 22:00–07:00, Nairobi 01:00–10:00", "London": " 07:00–12:00, Nairobi 10:00–15:00", "London + New York": " 12:00–17:00, Nairobi 15:00–20:00", "New York": " 17:00–22:00, Nairobi 20:00–01:00" };
   var PICK50 = (function () { try { var x = JSON.parse(sessionStorage.getItem("gst_pick50") || "null"); return x && !x.fp ? x : {}; } catch (e) { return {}; } })();
-  function savePick50(key, fp, want, sess, sides) {
-    if (want) PICK50[key] = { fp: fp, ticks: Object.keys(want), sess: sess || {}, sides: sides || {} }; else delete PICK50[key];
+  function savePick50(key, fp, want, sess, sides, opt) {   // opt (26 Nov 2026): {mode: "top" | "add" | "only", excl: [names]}
+    if (want) PICK50[key] = { fp: fp, ticks: Object.keys(want), sess: sess || {}, sides: sides || {}, mode: (opt || {}).mode || null, excl: (opt || {}).excl || null }; else delete PICK50[key];
     try { sessionStorage.setItem("gst_pick50", JSON.stringify(PICK50)); } catch (e) {}
   }
   // a live account's picked channels with their limits (23 Nov 2026, Arnold: "How come it doesnt show on dahsboard?"):
@@ -1412,90 +1509,83 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (st.status === "muted") return { badge: "Muted", cls: "badge", note: "Muted for 24 h, not copied: " + why };
     return { badge: st.folder || "Blacklist", cls: "badge folder", note: "In the " + (st.folder || "Blacklist") + " folder (still copied): " + why };
   }
-  // tgt (23 Nov 2026, "Live accounts should be able to hand pick from top 50 too"): null = the Sandbox (/start p...),
-  // or {sec, label, picked, changed_by, changed_at, on} = a live account (/start q<N>..., its owner or the admin confirms)
+  // Best of 10's channel builder (26 Nov 2026 revamp, Arnold: picks are ADDITIONAL channels, "Top 10 optional",
+  // "select best of 10 but exclude some channels", "revamp the settings tab to accommodate this dynamism", "best website
+  // styles (easy to use)"): one choice of what Best of 10 copies (the weekly top N / top N + my channels / only my
+  // channels), a live summary of what will be copied, a searchable and filterable list with Add and Never per channel,
+  // and one sticky bar to send. tgt: null = the Sandbox (/start p|t|v0|w0...), or {sec, label, picked, sessions, sides,
+  // top, exclude, changed_by, changed_at, on, topN, onDraft} = a live account (/start q|u|v|w<code>...).
   function b10Picker(T, statusOf, tgt) {
-    var key = tgt ? tgt.sec : "sandbox", who = tgt ? tgt.label : "the Sandbox";
-    var rows = T.rows, cur = (tgt ? tgt.picked : T.picked) || [], bot = DATA.portal_bot, want = {};
-    var by = tgt ? tgt.changed_by : T.changed_by, at = tgt ? tgt.changed_at : T.changed_at;
-    var draft = PICK50[key] && PICK50[key].fp === T.fp ? PICK50[key].ticks : null;
-    (draft || cur).forEach(function (g) { want[g] = 1; });
-    // the sessions each picked channel is copied in (23 Nov 2026, Arnold: "decide which session should the channels be
-    // used in"): bits 1 Asia, 2 London, 4 London + New York, 8 New York (London time); 15 = every session (the default)
-    var curSess = {}, curS = (tgt ? tgt.sessions : T.sessions) || {};
-    Object.keys(curS).forEach(function (g) { var b = 0; (curS[g] || []).forEach(function (x) { var k = SESS.indexOf(x); if (k >= 0) b |= 1 << k; }); curSess[g] = b; });
-    var wantS = {}, dS = draft ? (PICK50[key].sess || {}) : curSess;
+    var key = tgt ? tgt.sec : "sandbox", who = tgt ? tgt.label : "the Sandbox", bot = DATA.portal_bot, rows = T.rows;
+    var src = tgt || T, rowIx = {};
+    rows.forEach(function (r, i) { rowIx[r.grp] = i; });
+    var cur = (src.picked || []).slice(), curTop = !!src.top, curX = (src.exclude || []).slice();
+    var curMode = !cur.length ? "top" : curTop ? "add" : "only";
+    var by = src.changed_by, at = src.changed_at;
+    var D = PICK50[key] && PICK50[key].fp === T.fp ? PICK50[key] : null;   // ticks not sent yet (this browser tab)
+    var want = {}, wantX = {};
+    (D ? D.ticks : cur).forEach(function (g) { want[g] = 1; });
+    (D && D.excl ? D.excl : curX).forEach(function (g) { wantX[g] = 1; delete want[g]; });
+    var mode = D && D.mode ? D.mode : D ? (D.ticks.length ? (curTop ? "add" : "only") : curMode) : curMode;
+    // sessions (bits 1 Asia, 2 London, 4 London + New York, 8 New York; 15 = all) and side of each added channel
+    var curSess = {}, curSide = {}, wantS = {}, wantD = {};
+    Object.keys(src.sessions || {}).forEach(function (g) { var b = 0; (src.sessions[g] || []).forEach(function (x) { var k = SESS.indexOf(x); if (k >= 0) b |= 1 << k; }); curSess[g] = b; });
+    Object.keys(src.sides || {}).forEach(function (g) { var x = src.sides[g]; if (x === "buy" || x === "sell") curSide[g] = x; });
+    var dS = D ? (D.sess || {}) : curSess, dD = D ? (D.sides || {}) : curSide;
     Object.keys(dS).forEach(function (g) { wantS[g] = dS[g]; });
-    var bitsOf = function (g) { return g in wantS ? wantS[g] & 15 : 15; };
-    // ... and buys or sells only (23 Nov 2026, Arnold: "a filter that also targets the channel for buys or sells only")
-    var curSide = {}, wantD = {};
-    Object.keys((tgt ? tgt.sides : T.sides) || {}).forEach(function (g) { var v = ((tgt ? tgt.sides : T.sides) || {})[g]; if (v === "buy" || v === "sell") curSide[g] = v; });
-    var dD = draft ? (PICK50[key].sides || {}) : curSide;
     Object.keys(dD).forEach(function (g) { wantD[g] = dD[g]; });
+    var bitsOf = function (g) { return g in wantS ? wantS[g] & 15 : 15; };
     var sideOf = function (g) { return wantD[g] || ""; };
-    var gone = cur.filter(function (g) { return !rows.some(function (r) { return r.grp === g; }); });
-    var mask = function (ticked) {
-      var bytes = []; for (var i = 0; i < Math.ceil(rows.length / 8); i++) bytes.push(0);
-      var digits = "";
-      rows.forEach(function (r, i) { if (ticked[r.grp]) { bytes[i >> 3] |= 1 << (i & 7); digits += PCODES.charAt((sideOf(r.grp) === "buy" ? 16 : sideOf(r.grp) === "sell" ? 32 : 0) + bitsOf(r.grp)); } });
+    var B = DATA.best10 || {}, SC = B.scores || {}, minWin = +B.min_win || 0, minSig = +B.min_signals || 3;
+    // a live account's own weekly ranking when its Best of 10 runs (26 Nov 2026: it was the Sandbox's, so "In top N"
+    // could block Add for a channel the account doesn't copy); else the Sandbox's (the same rules)
+    var ranked = tgt && (tgt.ranking || []).length ? tgt.ranking.slice() : (B.ranking || []).map(function (r) { return r.grp; });
+    var stand = (B.standins || []).map(function (r) { return r.grp; });
+    var N = tgt ? (+tgt.topN || 10) : (ranked.length || 10), topList = ranked.slice(0, N);
+    var inTop = function (g) { return mode !== "only" && topList.indexOf(g) >= 0; };
+    var names = function () { return mode === "top" ? [] : rows.filter(function (r) { return want[r.grp] && !wantX[r.grp]; }).map(function (r) { return r.grp; }); };
+    var excl = function () { return rows.filter(function (r) { return wantX[r.grp]; }).map(function (r) { return r.grp; }); };
+    var effMode = function () { return names().length ? mode : "top"; };
+    var goneP = cur.filter(function (g) { return !(g in rowIx); }), goneX = curX.filter(function (g) { return !(g in rowIx); });
+    var mask = function (blank) {   // the /start payload (picks.encode): picks and exclusions (code "0") of the top 50
+      var nm = blank ? [] : names(), ex = blank ? [] : excl(), bytes = [], digits = "";
+      for (var i = 0; i < Math.ceil(rows.length / 8); i++) bytes.push(0);
+      rows.forEach(function (r, i) {
+        if (ex.indexOf(r.grp) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += "0"; }
+        else if (nm.indexOf(r.grp) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += PCODES.charAt((sideOf(r.grp) === "buy" ? 16 : sideOf(r.grp) === "sell" ? 32 : 0) + bitsOf(r.grp)); }
+      });
       var m = btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-      if (/[^f]/.test(digits)) return (tgt ? "u" + PCODE[tgt.sec] : "t") + T.fp + "_" + digits + "_" + m;   // some limited (picks.encode)
-      return (tgt ? "q" + PCODE[tgt.sec] : "p") + T.fp + "_" + m;
+      var lim = /[^f]/.test(digits), code = tgt ? String(PCODE[tgt.sec]) : "0";
+      if (!blank && mode === "add" && nm.length) return (lim ? "w" : "v") + code + T.fp + "_" + (lim ? digits + "_" : "") + m;
+      if (lim) return (tgt ? "u" + code : "t") + T.fp + "_" + digits + "_" + m;
+      return (tgt ? "q" + code : "p") + T.fp + "_" + m;
     };
-    var names = function () { return rows.filter(function (r) { return want[r.grp]; }).map(function (r) { return r.grp; }); };
+    var limKey = function (g) { return bitsOf(g) + ":" + sideOf(g); };
+    var curLim = function (g) { return (g in curSess ? curSess[g] : 15) + ":" + (curSide[g] || ""); };
     var same = function () {
-      var n = names();
-      return n.length === cur.length - gone.length && n.every(function (g) { return cur.indexOf(g) >= 0 && bitsOf(g) === (g in curSess ? curSess[g] : 15) && sideOf(g) === (curSide[g] || ""); });   // ticks = the picks in the list
+      var n = names(), c = cur.filter(function (g) { return g in rowIx; }), x = excl(), cx = curX.filter(function (g) { return g in rowIx; });
+      if (effMode() !== curMode || n.length !== c.length || x.length !== cx.length) return false;
+      return n.every(function (g) { return c.indexOf(g) >= 0 && limKey(g) === curLim(g); }) && x.every(function (g) { return cx.indexOf(g) >= 0; });
     };
-    var sessText = function (g) { var b = bitsOf(g), d = sideOf(g), x = [];
+    var limText = function (g) { var b = bitsOf(g), d = sideOf(g), x = [];
       if (b !== 15) x.push(SESS.filter(function (y, k) { return b >> k & 1; }).map(function (y) { return SESS_SHORT[y]; }).join(", ") || "no session");
       if (d) x.push(d + "s only");
-      return x.length ? " (" + x.join("; ") + ")" : ""; };
-    var msg = el("p", { cls: "note", style: "margin:8px 0" });
-    // two "Apply in Telegram" buttons on the Settings tab confused (23 Nov 2026, Arnold: "the apply in telegram appears
-    // twice"): this one sends the channel picks only, and says so
-    var apply = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply channel picks in Telegram"]);
-    var back = el("button", { type: "button", cls: "link", style: "font-size:16px;margin-left:24px" }, ["Back to the ranking"]);
-    var none = el("button", { type: "button", cls: "link", style: "margin-left:24px" }, ["Untick all"]);
-    var boxes = [];
-    var reset = el("button", { type: "button", cls: "link", style: "margin-left:24px" }, ["Back to the current picks"]);
-    function update() {
-      var n = names(), noSess = n.filter(function (g) { return !bitsOf(g); }), link = mask(want);
-      savePick50(key, T.fp, same() ? null : want, wantS, wantD);
-      if (tgt && tgt.onDraft) tgt.onDraft(!same() || gone.length > 0, n);   // the settings panel warns about unsent ticks
-      reset.disabled = same();
-      apply.disabled = (same() && !gone.length) || !bot || noSess.length > 0 || link.length > 64;   // a pick that left the top 50 is dropped by applying
-      boxes.forEach(function (b) { b.ses.forEach(function (x, k) { var on = !!want[b.grp] && (bitsOf(b.grp) >> k & 1); x.disabled = !want[b.grp];
-        x.className = "sesb" + (on ? " on" : ""); x.setAttribute("aria-pressed", on ? "true" : "false"); });
-        var d = sideOf(b.grp);
-        b.side.disabled = !want[b.grp]; b.side.className = "sesb" + (want[b.grp] ? " on" : "");
-        b.sideLab.textContent = d === "buy" ? "Buys only" : d === "sell" ? "Sells only" : "Buys + sells"; });
-      back.disabled = !cur.length || !bot;
-      msg.textContent = !bot ? "The tracker’s bot isn’t running, so picks can’t be sent yet." :
-        same() && !gone.length ? (cur.length ? "These are the channels picked now for " + who + ". Tick or untick to change them." : "Nothing picked for " + who + ": Best of 10 follows last week’s ranking. Tick channels to copy only those.") :
-        noSess.length ? "Tick at least one session for " + noSess.join(", ") + " (or untick the channel)." :
-        link.length > 64 ? "Too many channels limited to some sessions for one Telegram link: give some of them every session." :
-        n.length ? who + ": " + n.length + " ticked, NOT sent yet: " + n.map(function (g) { return g + sessText(g); }).join(", ") + ". Press “Apply channel picks in Telegram”, then Start and Apply in the bot." :
-        who + ": nothing ticked, NOT sent yet: applying goes back to last week’s ranking. Press “Apply channel picks in Telegram”, then Start and Apply.";
-    }
-    // (23 Nov 2026, Arnold: "Table needs more columns. We had win rate | score | Note columns. Ranking to use score so as
-    // to match criteria for best of 10. We still maintain the list of Top 50"): the same top 50, ordered by Best of 10's
-    // score on its ranking basis (the Sandbox's numbers for every channel: last week, or last week + Monday after the
-    // Monday-close check); channels that would qualify (3+ signals, positive, at or above the win floor) first
-    var B = DATA.best10 || {}, SC = B.scores || {}, minWin = +B.min_win || 0, minSig = +B.min_signals || 3;
-    var ranked = (B.ranking || []).map(function (r) { return r.grp; }), stand = (B.standins || []).map(function (r) { return r.grp; });
+      return x.join("; "); };
+    var describe = function (m, n, x) {
+      return (m === "top" ? "the weekly top " + N : m === "add" ? "the weekly top " + N + " + " + n + " channel" + (n === 1 ? "" : "s") + " of your own" : "only your " + n + " channel" + (n === 1 ? "" : "s")) +
+        (x ? ", " + x + " never copied" : "");
+    };
+
+    // --- stats per channel (as before): Best of 10's score, this week so far, last 28 days by session and side ---
     var pzd = {};
     (B.pause_log || []).forEach(function (e) { if (!B.week || e.week === B.week) { if (e.event === "back") delete pzd[e.grp]; else pzd[e.grp] = e; } });
     var fits = function (x) { return !!x && x.signals >= minSig && x.net > 0 && x.win >= minWin - 1e-9; };
-    // this week so far (23 Nov 2026, "More columns missed: Current week results - win rate, signals, etc"): the tracker's
-    // scoring of each channel's closed positions (every TP) since Sunday 23:00 Nairobi, as in "This week's channels"
     var wkStart = B.week ? new Date(Date.parse(B.week + "T00:00:00Z") - 4 * 3600e3).toISOString() : "", cw = {};
     (DATA.legs || []).forEach(function (l) {
       if (!wkStart || l.status !== "closed" || l.r_multiple == null || (l.posted_at || "") < wkStart) return;
       var c = cw[l.grp] || (cw[l.grp] = { r: 0, n: 0, w: 0, ids: {} });
       c.r += l.r_multiple; c.n += 1; c.w += l.r_multiple > 0.05 ? 1 : 0; c.ids[l.trade_id] = 1;
     });
-    // each channel's last 28 days by session (every TP, closed positions, the tracker's session of the fill, London time)
     var s28 = {}, d28 = {}, from28 = new Date(Date.now() - 28 * 864e5).toISOString();
     (DATA.legs || []).forEach(function (l) {
       if (l.status !== "closed" || l.r_multiple == null || !l.session || (l.posted_at || "") < from28) return;
@@ -1504,7 +1594,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var cd = d28[l.grp] || (d28[l.grp] = {}), y = cd[l.side] || (cd[l.side] = { r: 0, n: 0, w: 0 });
       y.r += l.r_multiple; y.n += 1; y.w += l.r_multiple > 0.05 ? 1 : 0;
     });
-    var shown = rows.map(function (r) { var x = SC[r.grp] || null; return { r: r, x: x, ok: fits(x) }; }).sort(function (p, q) {
+    // the weekly top N first (in ranking order), then the channels that would qualify, by score
+    var shown = rows.map(function (r) { var x = SC[r.grp] || null; return { r: r, x: x, ok: fits(x), t: topList.indexOf(r.grp) }; }).sort(function (p, q) {
+      if ((p.t >= 0) !== (q.t >= 0)) return p.t >= 0 ? -1 : 1;
+      if (p.t >= 0) return p.t - q.t;
       if (p.ok !== q.ok) return p.ok ? -1 : 1;
       if (!!p.x !== !!q.x) return p.x ? -1 : 1;
       if (p.x && q.x && p.x.score !== q.x.score) return q.x.score - p.x.score;
@@ -1512,68 +1605,167 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     });
     var noteOf = function (g, x, ok) {
       var out = [], k = ranked.indexOf(g), st = statusOf(g);
-      if (k >= 0) out.push("In the Sandbox’s Best of 10 this week (#" + (k + 1) + ")" + ((B.replaced || []).indexOf(g) >= 0 ? ", out for now" : ""));
+      if (k >= 0) out.push("#" + (k + 1) + " in this week’s ranking" + ((B.replaced || []).indexOf(g) >= 0 ? ", out for now" : ""));
       if (stand.indexOf(g) >= 0) out.push("Stand-in on the Sandbox this week");
-      // the pause's numbers when it started, and now (23 Nov 2026, Arnold: "Is the note column up to date...Win is 58% currently")
       if (pzd[g]) out.push("Paused by the mid-week check since " + when(pzd[g].at) + " (" + Math.round((pzd[g].win || 0) * 100) + "% of " + pzd[g].n + " then" +
         (cw[g] ? "; now " + pct(cw[g].w, cw[g].n) + " of " + cw[g].n : "") + "; copied again at " + Math.round((pzd[g].resume || 0.65) * 100) + "%)");
-      if (st) out.push(st.note.replace(", not copied:", " (copied anyway if ticked):").replace(/ \(still copied\)/, ""));
+      if (st) out.push(st.note.replace(/ \(still copied\)/, ""));
       if (!x) out.push("No closed signals " + (B.scores_basis || "last week"));
       else if (!ok) out.push(x.signals < minSig ? "Only " + x.signals + " signal" + (x.signals === 1 ? "" : "s") + " (the ranking needs " + minSig + ")" :
         x.net <= 0 ? "Negative " + (B.scores_basis || "last week") : "Win rate under the " + Math.round(minWin * 100) + "% floor");
       return out.join(". ");
     };
-    var body = shown.map(function (it, n) {
-      var r = it.r, x = it.x;
-      var cb = el("input", { type: "checkbox", "aria-label": "Copy " + r.grp, on: { change: function (e) { if (e.target.checked) want[r.grp] = 1; else delete want[r.grp]; update(); } } });
-      cb.checked = !!want[r.grp];
+    var rc = function (v) { return v == null ? "–" : el("span", { cls: v > 0 ? "win" : v < 0 ? "loss" : "", text: signed(v, 1) + "R" }); };
+
+    // --- 1. what Best of 10 copies ---
+    var MODES = [["top", "Weekly top " + N, "Copies this week’s " + N + " best channels, re-ranked every Monday. A muted, blacklisted, paused or excluded one is replaced by the next best (stand-in)."],
+      ["add", "Top " + N + " + my channels", "This week’s top " + N + " as above, PLUS the channels you add below, each with its own sessions and direction. Your channels stay until you remove them, whatever Monday’s ranking."],
+      ["only", "Only my channels", "Only the channels you add below; the weekly ranking is not used. With the safety rules on, a paused or muted pick gets a stand-in from this week’s top 10."]];
+    var modeBtns = MODES.map(function (m) {
+      return el("button", { type: "button", cls: "segb", role: "radio", on: { click: function () { mode = m[0]; update(); } } }, [m[1]]);
+    });
+    var modeHelp = el("p", { cls: "note", style: "margin:-8px 0 14px;max-width:80ch" });
+    // --- 2. the live summary ---
+    var sumHead = el("div", { style: "font-weight:600;margin-bottom:6px" }), sumChips = el("div"), sumNever = el("div", { style: "margin-top:6px" });
+    var summary = el("div", { cls: "panel", style: "margin-bottom:14px" }, [sumHead, sumChips, sumNever]);
+    // --- 3. the list: search, filters, more columns ---
+    var q = "", filt = "all", more = false;
+    var search = el("input", { type: "search", placeholder: "Search channels…", "aria-label": "Search channels", on: { input: function (e) { q = e.target.value.toLowerCase(); update(); } } });
+    var FILTERS = [["all", "All 50"], ["copied", "Copied"], ["top", "Top " + N], ["qual", "Would qualify"], ["never", "Never"]];
+    var filtBtns = FILTERS.map(function (f) { return el("button", { type: "button", cls: "segb small", on: { click: function () { filt = f[0]; update(); } } }, [f[1]]); });
+    var moreBox = el("input", { type: "checkbox", on: { change: function (e) { more = e.target.checked; update(); } } });
+    var tools = el("div", { cls: "tool" }, [search, el("div", { cls: "seg", style: "margin:0" }, filtBtns), el("label", { cls: "note" }, [moreBox, " More columns"])]);
+    var boxes = [];
+    var tbody = el("tbody", null, shown.map(function (it) {
+      var r = it.r, x = it.x, g = r.grp, c = cw[g];
+      var act = el("button", { type: "button", cls: "sesb act", on: { click: function () {
+        if (inTop(g) && !want[g]) {   // a top-N channel marked Never: "Allow" puts it back in the top N (26 Nov 2026: did nothing)
+          if (wantX[g]) { delete wantX[g]; update(); }
+          return;
+        }
+        if (mode === "top") { mode = "add"; want[g] = 1; }
+        else if (want[g]) delete want[g]; else want[g] = 1;
+        delete wantX[g]; update(); } } });
+      var nev = el("button", { type: "button", cls: "sesb never", title: "Never copy " + g + " on " + who + ", even when it ranks in the top " + N + " (the next best takes its place).",
+        on: { click: function () { if (wantX[g]) delete wantX[g]; else { wantX[g] = 1; delete want[g]; } update(); } } }, ["Never"]);
       var ses = SESS.map(function (sn, k) {
-        var d = (s28[r.grp] || {})[sn], lab = SESS_SHORT[sn];
+        var d = (s28[g] || {})[sn];
         return el("button", { type: "button", cls: "sesb", title: sn + " (London time" + SESS_NBO[sn] + "): " + (d ? signed(d.r, 1) + "R from " + d.n + " position" + (d.n === 1 ? "" : "s") + ", " + pct(d.w, d.n) + " won, last 28 days" : "no closed positions in the last 28 days") +
-          ". Tick the channel, then click to copy it in this session or not.",
-          on: { click: function () { var b = bitsOf(r.grp) ^ (1 << k); if (b === 15) delete wantS[r.grp]; else wantS[r.grp] = b; update(); } } },
-          [lab + " ", d ? el("span", { cls: d.r > 0 ? "win" : d.r < 0 ? "loss" : "", text: signed(d.r, 0) }) : "–"]);
+          ". For a channel you added: click to copy it in this session or not.",
+          on: { click: function () { var b = bitsOf(g) ^ (1 << k); if (b === 15) delete wantS[g]; else wantS[g] = b; update(); } } },
+          [SESS_SHORT[sn] + " ", d ? el("span", { cls: d.r > 0 ? "win" : d.r < 0 ? "loss" : "", text: signed(d.r, 0) }) : "–"]);
       });
-      var dd = d28[r.grp] || {}, sideTip = function (k, lab) { var d = dd[k]; return lab + ": " + (d ? signed(d.r, 1) + "R from " + d.n + " position" + (d.n === 1 ? "" : "s") + ", " + pct(d.w, d.n) + " won" : "none closed"); };
+      var dd = d28[g] || {}, sideTip = function (k, lab) { var d = dd[k]; return lab + ": " + (d ? signed(d.r, 1) + "R from " + d.n + " position" + (d.n === 1 ? "" : "s") + ", " + pct(d.w, d.n) + " won" : "none closed"); };
       var sideLab = el("span", { text: "Buys + sells" });
       var side = el("button", { type: "button", cls: "sesb", title: "Last 28 days, every TP. " + sideTip("buy", "Buys") + "; " + sideTip("sell", "Sells") +
-          ". Tick the channel, then click to copy its buys and sells, its buys only, or its sells only. Mostly gold's direction: in a falling week sells win for nearly every channel.",
-          on: { click: function () { var d = sideOf(r.grp), nx = d === "" ? "buy" : d === "buy" ? "sell" : ""; if (nx) wantD[r.grp] = nx; else delete wantD[r.grp]; update(); } } },
+          ". For a channel you added: click to copy its buys and sells, buys only, or sells only. Mostly follows gold’s direction that month: use with care.",
+          on: { click: function () { var d = sideOf(g), nx = d === "" ? "buy" : d === "buy" ? "sell" : ""; if (nx) wantD[g] = nx; else delete wantD[g]; update(); } } },
         [sideLab, " ", dd.buy ? el("span", { cls: dd.buy.r > 0 ? "win" : dd.buy.r < 0 ? "loss" : "", text: "B" + signed(dd.buy.r, 0) }) : "B –", " ",
          dd.sell ? el("span", { cls: dd.sell.r > 0 ? "win" : dd.sell.r < 0 ? "loss" : "", text: "S" + signed(dd.sell.r, 0) }) : "S –"]);
-      boxes.push({ cb: cb, grp: r.grp, ses: ses, side: side, sideLab: sideLab });
-      var st = statusOf(r.grp);
-      var name = st ? el("span", null, [document.createTextNode(r.grp), el("span", { cls: st.cls, title: st.note.replace(", not copied", ": copied anyway if ticked"), text: st.badge })]) : r.grp;
-      var rc = function (v) { return v == null ? "–" : el("span", { cls: v > 0 ? "win" : v < 0 ? "loss" : "", text: signed(v, 1) + "R" }); };
-      var c = cw[r.grp];
-      return [cb, String(n + 1), name, el("span", null, ses), side, x ? rc(x.net) : "–", x ? pct(Math.round(x.win * 100), 100) : "–", x ? x.signals : "–",
-        x ? signed(x.score, 1) : "–", c ? rc(c.r) : "–", c ? pct(c.w, c.n) : "–", c ? Object.keys(c.ids).length : 0,
-        rc(r.net), r.votes ? "Yes" : "No", noteOf(r.grp, x, it.ok)];
-    });
-    apply.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=" + mask(want), "_blank"); });
-    back.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=" + mask({}), "_blank"); });
-    none.addEventListener("click", function () { want = {}; wantS = {}; wantD = {}; boxes.forEach(function (b) { b.cb.checked = false; }); update(); });
-    reset.addEventListener("click", function () { want = {}; cur.forEach(function (g) { want[g] = 1; });
+      var st = statusOf(g), note = noteOf(g, x, it.ok);
+      var nameCell = el("td", { cls: "wrap" }, [el("strong", { text: g }), st ? el("span", { cls: st.cls, title: st.note, text: st.badge }) : null,
+        it.t >= 0 ? el("span", { cls: "badge new", title: "#" + (it.t + 1) + " in this week’s ranking", text: "Top " + N + " #" + (it.t + 1) }) : null]);
+      nameCell.title = note;
+      var td = function (v, c2) { return el("td", c2 ? { cls: c2 } : null, [v == null ? "–" : typeof v === "object" ? v : String(v)]); };
+      var tr = el("tr", null, [el("td", { cls: "acts" }, [act, nev]), nameCell, el("td", null, ses), el("td", null, [side]),
+        td(x ? signed(x.score, 1) : "–", "num"), td(x ? rc(x.net) : "–", "num"), td(c ? rc(c.r) : "–", "num"), td(rc(r.net), "num"),
+        td(x ? pct(Math.round(x.win * 100), 100) : "–", "num more"), td(x ? x.signals : "–", "num more"), td(c ? pct(c.w, c.n) : "–", "num more"),
+        td(c ? Object.keys(c.ids).length : 0, "num more"), td(r.votes ? "Yes" : "No", "more"), el("td", { cls: "wrap note more", text: note })]);
+      boxes.push({ g: g, tr: tr, act: act, nev: nev, ses: ses, side: side, sideLab: sideLab, ok: it.ok });
+      return tr;
+    }));
+    var head = ["Copy", "Channel", "Sessions (28-day R)", "Side (28-day R)", "Score", "Last wk R", "This wk R", "28-day R", "Last wk win", "Last wk sig.", "This wk win", "This wk sig.", "Votes", "Note"];
+    var tbl = el("table", { cls: "compact b10t lite" }, [el("thead", null, [el("tr", null, head.map(function (h, i) { return el("th", { scope: "col", cls: (i >= 4 && i <= 11 ? "num" : "") + (i >= 8 ? " more" : ""), text: h }); }))]), tbody]);
+    var noRows = el("p", { cls: "empty", style: "display:none", text: "No channel matches." });
+    // --- 4. send: the settings tab's bar (tgt.onDraft), else this list's own sticky bar ---
+    var msg = el("div", { cls: "what" });
+    var send = el("button", { type: "button", cls: "btnp" }, ["Send to Telegram"]);
+    var undo = el("button", { type: "button", cls: "btns" }, ["Undo changes"]);
+    var doSend = function () { window.open("https://t.me/" + bot + "?start=" + mask(), "_blank"); };
+    var doUndo = function () {
+      want = {}; cur.forEach(function (g) { want[g] = 1; }); wantX = {}; curX.forEach(function (g) { wantX[g] = 1; });
       wantS = {}; Object.keys(curSess).forEach(function (g) { wantS[g] = curSess[g]; });
       wantD = {}; Object.keys(curSide).forEach(function (g) { wantD[g] = curSide[g]; });
-      boxes.forEach(function (b) { b.cb.checked = !!want[b.grp]; }); update(); });
-    var now = cur.length ? "Picked now: " + cur.length + " channel" + (cur.length > 1 ? "s" : "") + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") +
-      (Object.keys(curSess).length ? " (limited to some sessions: " + Object.keys(curSess).map(function (g) { return g + " " + SESS.filter(function (x, k) { return curSess[g] >> k & 1; }).map(function (x) { return SESS_SHORT[x]; }).join("/"); }).join("; ") + ")" : "") +
-      (Object.keys(curSide).length ? " (one way only: " + Object.keys(curSide).map(function (g) { return g + " " + curSide[g] + "s"; }).join("; ") + ")" : "") + "." :
-      "Nothing picked now: Best of 10 copies last week’s best channels.";
-    var panel = el("div", { cls: "panel", style: "margin-bottom:10px" }, [apply, back, none, reset, msg,
-      gone.length ? el("p", { cls: "note", text: "Picked but no longer in this week’s top 50 (still copied until you apply a new pick): " + gone.join(", ") + "." }) : null,
-      el("p", { cls: "note", text: tgt ? "Only " + tgt.label + "’s owner or the admin can confirm in Telegram. " + (tgt.on ? "" : "Best of 10 is off on " + tgt.label + ": the picks trade once it is ticked above. ") + "Channels to copy (the number) doesn’t apply while channels are picked."
-        : "Only the admin or a linked account owner can confirm in Telegram. Live accounts pick their own on the Settings tab." })]);
+      mode = curMode; update();
+    };
+    send.addEventListener("click", doSend);
+    undo.addEventListener("click", doUndo);
+    var ownBar = tgt && tgt.onDraft ? null : el("div", { cls: "savebar", role: "region", "aria-label": "Unsent channel changes" }, [el("div", { cls: "row" }, [msg, undo, send])]);
+
+    function update() {
+      var n = names(), x = excl(), noSess = n.filter(function (g) { return !bitsOf(g); }), link = mask(), dirty = !same() || goneP.length > 0 || goneX.length > 0;
+      savePick50(key, T.fp, same() ? null : want, wantS, wantD, { mode: mode, excl: x });
+      modeBtns.forEach(function (b, i) { var on = MODES[i][0] === mode; b.className = "segb" + (on ? " on" : ""); b.setAttribute("aria-checked", on ? "true" : "false"); });
+      modeHelp.textContent = MODES.filter(function (m) { return m[0] === mode; })[0][2];
+      // summary
+      var tops = mode === "only" ? [] : topList.filter(function (g) { return !wantX[g]; });
+      var outTop = mode === "only" ? [] : topList.filter(function (g) { return wantX[g]; });
+      var own = n.filter(function (g) { return tops.indexOf(g) < 0; });
+      sumHead.textContent = "Will copy on " + who + ": " + (tops.length + own.length) + " channel" + (tops.length + own.length === 1 ? "" : "s") +
+        (outTop.length ? " (" + outTop.length + " of the top " + N + " excluded: the next best stand" + (outTop.length === 1 ? "s" : "") + " in)" : "") +
+        (mode === "only" && !n.length ? ": add at least one channel below, or choose “Weekly top " + N + "”" : "");
+      sumChips.textContent = "";
+      tops.forEach(function (g) { var l = n.indexOf(g) >= 0 ? limText(g) : "";   // a top channel you also added keeps your limits
+        sumChips.appendChild(el("span", { cls: "chip" + (n.indexOf(g) >= 0 ? " add" : ""), title: "In this week’s top " + N + (n.indexOf(g) >= 0 ? "; also added by you, so it stays copied after Monday’s re-rank" : "") },
+          ["#" + (topList.indexOf(g) + 1) + " " + g + (l ? " (" + l + ")" : "")])); });
+      own.forEach(function (g) { var l = limText(g);
+        sumChips.appendChild(el("span", { cls: "chip add" }, ["+ " + g + (l ? " (" + l + ")" : ""),
+          el("button", { type: "button", "aria-label": "Remove " + g, title: "Remove", on: { click: function () { delete want[g]; update(); } } }, ["✕"])])); });
+      if (!tops.length && !own.length) sumChips.appendChild(el("span", { cls: "note", text: "Nothing yet." }));
+      sumNever.textContent = "";
+      if (x.length) {
+        sumNever.appendChild(el("span", { cls: "note", text: "Never copied: " }));
+        x.forEach(function (g) { sumNever.appendChild(el("span", { cls: "chip never" }, ["⊘ " + g,
+          el("button", { type: "button", "aria-label": "Allow " + g + " again", title: "Allow again", on: { click: function () { delete wantX[g]; update(); } } }, ["✕"])])); });
+      }
+      // rows
+      var shownN = 0;
+      boxes.forEach(function (b) {
+        var g = b.g, isX = !!wantX[g], top = inTop(g), pick = mode !== "top" && !!want[g] && !isX, copied = !isX && (top || pick);
+        b.act.disabled = top && !want[g] && !isX;
+        b.act.textContent = isX ? (top && !want[g] ? "Allow" : mode === "only" ? "Copy" : "Add") : top && !want[g] ? "In top " + N : pick ? "✓ " + (mode === "only" ? "Copied" : "Added") : "+ " + (mode === "only" ? "Copy" : "Add");
+        b.act.className = "sesb act" + (copied ? " on" : "");
+        b.act.title = isX && top && !want[g] ? "Allow " + g + " again: it is back in this week’s top " + N + "." :
+          top && !want[g] ? g + " is copied as part of this week’s top " + N + ". Use Never to leave it out." :
+          pick ? "Click to remove " + g : mode === "top" ? "Add " + g + " on top of the weekly top " + N + " (switches to “Top " + N + " + my channels”)" : "Copy " + g + " on " + who;
+        b.nev.className = "sesb never" + (isX ? " on" : "");
+        b.nev.setAttribute("aria-pressed", isX ? "true" : "false");
+        b.ses.forEach(function (s, k) { var on = copied && (!pick || (bitsOf(g) >> k & 1)); s.disabled = !pick; s.className = "sesb" + (on ? " on" : ""); s.setAttribute("aria-pressed", on ? "true" : "false"); });
+        var d = sideOf(g);
+        b.side.disabled = !pick; b.side.className = "sesb" + (copied ? " on" : "");
+        b.sideLab.textContent = pick && d === "buy" ? "Buys only" : pick && d === "sell" ? "Sells only" : "Buys + sells";
+        b.tr.className = copied ? "in" : isX ? "never" : "";
+        var vis = (!q || g.toLowerCase().indexOf(q) >= 0) && (filt === "all" || filt === "copied" && copied || filt === "top" && topList.indexOf(g) >= 0 || filt === "qual" && b.ok || filt === "never" && isX);
+        b.tr.style.display = vis ? "" : "none";
+        if (vis) shownN++;
+      });
+      filtBtns.forEach(function (fb, i) { fb.className = "segb small" + (FILTERS[i][0] === filt ? " on" : ""); });
+      tbl.className = "compact b10t" + (more ? "" : " lite");
+      noRows.style.display = shownN ? "none" : "";
+      // status
+      var ok = !!bot && !noSess.length && link.length <= 64 && !(mode === "only" && !n.length);
+      var text = !bot ? "The tracker’s bot isn’t running, so channel changes can’t be sent yet." :
+        !dirty ? "Channels: no changes. " + who.charAt(0).toUpperCase() + who.slice(1) + " copies " + describe(curMode, cur.length, curX.length) + "." :
+        noSess.length ? "Channels: tick at least one session for " + noSess.join(", ") + " (or remove it)." :
+        mode === "only" && !n.length ? "Channels: “Only my channels” needs at least one channel." :
+        link.length > 64 ? "Channels: too many limits for one Telegram link: give some added channels every session." :
+        "Channels, not sent yet: " + describe(effMode(), effMode() === "add" ? own.length : n.length, x.length) + ".";
+      if (tgt && tgt.onDraft) tgt.onDraft({ dirty: dirty, ok: ok, text: text, send: doSend, undo: doUndo });
+      else { msg.textContent = text; send.disabled = !dirty || !ok; undo.disabled = !dirty; ownBar.className = "savebar" + (dirty ? " dirty" : ""); }
+    }
+    var now = cur.length || curX.length ? "Now: " + describe(curMode, cur.length, curX.length) + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") + "." : "Now: the weekly top " + N + " (nothing added or excluded).";
+    var help = el("details", { cls: "note", style: "margin-top:10px" }, [el("summary", { text: "How this list works" }),
+      el("p", { style: "max-width:90ch", text: "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "). This week’s top " + N + " come first, then the channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") by Best of 10’s score (net R × win rate on every TP, " + (B.scores_basis || "last week") + "). " +
+        "“+ Add” copies a channel on " + who + " (in “Weekly top " + N + "” it switches to “Top " + N + " + my channels”); “Never” leaves a channel out even when it ranks, and the next best takes its place. " +
+        "Sessions and Side apply to the channels you add: lit = copied. Sessions are by when the channel posts, London time: Asia 22:00–07:00 (01:00–10:00 Nairobi), London 07:00–12:00 (10:00–15:00), London + New York 12:00–17:00 (15:00–20:00), New York 17:00–22:00 (20:00–01:00); the numbers are the last 28 days’ R in each. " +
+        "Changes are sent through the tracker’s bot: tap Start, then Apply. " + (tgt ? "Only " + tgt.label + "’s owner or the admin can confirm." : "Only the admin or a linked account owner can confirm; live accounts pick their own on the Settings tab.") })]);
     update();
-    return block(tgt ? "Best of 10: pick channels for " + tgt.label + " (this week’s top 50)" : "Pick channels to copy (this week’s top 50)",
-      "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "), ordered by Best of 10’s score: net R × win rate on every TP, " + (B.scores_basis || "last week") +
-      (SC && Object.keys(SC).length ? "" : " (not worked out yet: the Sandbox shows it after its next pass)") + "; “This wk”: the tracker’s scoring of each channel’s closed positions since Sunday 23:00 Nairobi. Channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") come first. " +
-      "Tick the channels Best of 10 should copy " + (tgt ? "on " + tgt.label : "on the Sandbox") + " and press “Apply channel picks in Telegram”" + (tgt ? " (this list’s own button: the settings’ button above doesn’t send picks)" : "") + ": from then on only the ticked channels are copied, whatever their ranking, the channel rules (Blacklisted / Muted) or the mid-week pause. " +
-      "“Back to the ranking” clears the picks. " +
-      "“Sessions”: a ticked channel is copied in every session unless you click some off (lit = copied; the number is its last 28 days’ R in that session, every TP; hover for the details). A signal is judged by when the channel posted it, London time: Asia 22:00–07:00 (01:00–10:00 Nairobi), London 07:00–12:00 (10:00–15:00), London + New York 12:00–17:00 (15:00–20:00), New York 17:00–22:00 (20:00–01:00). “Side”: click to copy the channel’s buys and sells (the default), its buys only, or its sells only (B / S: its last 28 days’ R on each side). Side results mostly follow gold’s direction that month, so use it with care. " + now,
-      el("div", null, [panel, table(["Copy", "#", "Channel", "Sessions (28-day R)", "Side (28-day R)", "Last wk R", "Last wk win", "Last wk sig.", "Score", "This wk R", "This wk win", "This wk sig.", "28-day R", "Votes", "Note"], body,
-        { num: [1, 5, 6, 7, 8, 9, 10, 11, 12], wrap: [2, 3, 4, 14], cls: "compact" })]));   // the buttons above the 50 rows
+    var body = el("div", null, [
+      el("div", { cls: "seg", role: "radiogroup", "aria-label": "What Best of 10 copies" }, modeBtns), modeHelp, summary,
+      tgt && !tgt.on ? el("p", { cls: "note", style: "color:var(--loss);margin:-6px 0 12px", text: "Best of 10 is off on " + tgt.label + ": these channels trade once it is switched on under Strategies." }) : null,
+      goneP.length || goneX.length ? el("p", { cls: "note", text: "No longer in this week’s top 50 (kept until you send a new choice, then dropped): " + goneP.concat(goneX.map(function (g) { return g + " (never)"; })).join(", ") + "." }) : null,
+      tools, el("div", { cls: "scroll" }, [tbl]), noRows, help, ownBar]);
+    return block(tgt ? "Best of 10 channels: " + tgt.label : "Best of 10 channels on the Sandbox", "Choose what Best of 10 copies, add your own channels (with sessions and direction) and leave out any you never want. " + now, body);
   }
   function b3BackfillNote(bandit) {   // why "Include backfill" doesn't change this tab (the bandit page has its own wording since 23 Nov 2026)
     if (bandit) return el("p", { cls: "note", style: "margin-bottom:12px;max-width:80ch", text:
@@ -1872,14 +2064,14 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   }
   // ---------- Analytics (23 Nov 2026, Arnold: "The analytics section is weak. Could you improve it so that we can get
   // more insights"; chose all four: Money & risk, Consensus deep-dive, Channel quality, Stops & targets) ----------
-  var ANALYTICS = [["money", "Money & risk"], ["consensus", "Consensus"], ["channels", "Channel quality"], ["scorecard", "Channel scorecard"], ["stops", "Stops & targets"], ["signals", "All signals"]];
+  var ANALYTICS = [["money", "Money & risk"], ["consensus", "Consensus"], ["channels", "Channel quality"], ["scorecard", "Channel scorecard"], ["finder", "Channel finder"], ["stops", "Stops & targets"], ["signals", "All signals"]];
   function viewAnalytics(v) {
     var cur = ANALYTICS.some(function (a) { return a[0] === state.an; }) ? state.an : "money";
     v.appendChild(el("div", { cls: "seg", role: "group", "aria-label": "Analytics section" }, ANALYTICS.map(function (a) {
       return el("button", { type: "button", cls: "segb" + (a[0] === cur ? " on" : ""), "aria-pressed": a[0] === cur ? "true" : "false",
         on: { click: function () { go({ an: a[0] }, true); } } }, [a[1]]);
     })));
-    ({ money: anMoney, consensus: anConsensus, channels: anChannels, scorecard: anScorecard, stops: anStops, signals: anSignals }[cur])(v);
+    ({ money: anMoney, consensus: anConsensus, channels: anChannels, scorecard: anScorecard, finder: anFinder, stops: anStops, signals: anSignals }[cur])(v);
   }
   var usd = function (x, d) { return x == null || isNaN(x) ? "–" : (x > 0 ? "+$" : x < 0 ? "−$" : "$") + Math.abs(x).toFixed(d == null ? 2 : d); };
   var ucell = function (x, d) { return x == null || isNaN(x) ? "–" : el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: usd(x, d) }); };
@@ -2054,7 +2246,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var on = (o[0] === "tp1") === tp1;
       return el("button", { type: "button", cls: "segb" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false", on: { click: function () { go({ atp: o[0] }, true); } } }, [o[1]]);
     })));
-    var legs = LEGS.filter(function (t) { return (state.bf || t.source !== "backfill") && t.status === "closed" && t.r_multiple != null && (!tp1 || (t.leg || 1) === 1) && sideOK(t.side) && sessOK(t); });
+    var legs = LEGS.filter(function (t) { return (state.bf || t.source !== "backfill") && t.status === "closed" && t.r_multiple != null && (!tp1 || (t.leg || 1) === 1) && sideOK(t.side) && sessOK(t) && b10OK(t); });
     var per = {};
     legs.forEach(function (t) {
       var x = Date.parse(t.posted_at); if (isNaN(x) || x < starts[0]) return;
@@ -2197,7 +2389,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     v.appendChild(segs("Channels", all ? "all" : "", [["", "This week’s top 50"], ["all", "Every channel"]], "aa"));
     var LS = legsAsB10(LEGS.filter(function (t) {
       return (state.bf || t.source !== "backfill") && t.status === "closed" && t.r_multiple != null && (!capN || (t.leg || 1) <= capN) &&
-        t.grp !== "Consensus" && t.grp !== "Consensus ladder" && t.grp !== "Own signals" && inPeriod(tOf(t, "posted_at")) && sideOK(t.side) && sessOK(t);
+        t.grp !== "Consensus" && t.grp !== "Consensus ladder" && t.grp !== "Own signals" && inPeriod(tOf(t, "posted_at")) && sideOK(t.side) && sessOK(t) && b10OK(t);
     }), trail);
     var per = {};
     LS.forEach(function (l) { (per[l.grp] = per[l.grp] || []).push(l); });
@@ -2344,6 +2536,203 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
           return [x.account, parts.join("; ") || "nothing closed", x.breaches ? el("span", { cls: "loss", text: String(x.breaches) }) : "0", x.watch, x.review]; }), { num: [2, 3, 4], wrap: [1], cls: "compact" }),
           (au.findings || []).length ? table(["Time", "Account", "Rule", "Detail"], au.findings.map(function (f) { return [when(f.at), f.account, (f.severity === "breach" ? "⚠️ " : "👀 ") + f.rule, f.detail]; }), { wrap: [3], cls: "compact" }) : el("p", { cls: "note", text: "No breach and nothing to watch that day." })])));
     } else v.appendChild(block("Auditor", "", empty("No audit yet: the first one runs at 00:10 Nairobi after the restart (or send /audit to the bot).")));
+  }
+
+  // ===== Channel finder (26 Nov 2026, Arnold: "a section in our website that assists in recommending the channels (shows
+  // performance) and provides relevant filters"; chose: an Analytics section, a ranked list + a suggested set per account,
+  // with style, consistency, fit with our rules and overlap). Every channel scored the way Best of 10 copies it now (every
+  // TP or the chosen positions per signal, stops capped at $10, the split trail), over the chosen lookback; the filter bar
+  // applies (period wins over the lookback; side, session, channels, Best of 10). Recommended = enough signals, positive,
+  // up in both halves of the lookback, up in at least half its weeks, its stop mostly within our $10 cap, not muted,
+  // blacklisted or paused now. The suggested set takes the best recommended channels that overlap little with each other
+  // (same side within 15 minutes), each with every session except one where it clearly lost (6+ signals, net negative);
+  // "Open in Settings" puts the set into that account's picker as unsent ticks, to apply through the Telegram bot.
+  var FIND_STYLES = [["", "All styles"], ["Scalper", "Scalpers"], ["Intraday ladder", "Intraday ladders"], ["Single target", "Single target"], ["Swing-leaning", "Swing-leaning"]];
+  function median(a) { if (!a.length) return null; var b = a.slice().sort(function (x, y) { return x - y; }), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
+  function chanStyle(ls) {   // from its signals: stop, first and last target, number of targets, how long the last position ran
+    var by = {};
+    ls.forEach(function (l) { var k = l.trade_id || l.id; (by[k] = by[k] || []).push(l); });
+    var stops = [], tp1 = [], tpl = [], ntp = [], hold = [], fit = 0, n = 0;
+    Object.keys(by).forEach(function (k) {
+      var g = by[k], l0 = g[0], e = l0.fill_price != null ? +l0.fill_price : parseFloat(String(l0.entry || "").split("-")[0]);
+      if (isNaN(e) || l0.sl_initial == null) return;
+      var st = Math.abs(e - l0.sl_initial), d = g.filter(function (x) { return x.tp != null; }).map(function (x) { return Math.abs(x.tp - e); });
+      if (!d.length || !st) return;
+      n++; stops.push(st); if (st <= 12.0001) fit++;   // our $10 cap cuts a $10-12 stop only a little
+      tp1.push(Math.min.apply(null, d)); tpl.push(Math.max.apply(null, d)); ntp.push(l0.legs || d.length);
+      var h = g.map(function (x) { return x.minutes_in_trade; }).filter(function (x) { return x != null; });
+      if (h.length) hold.push(Math.max.apply(null, h));
+    });
+    var o = { stop: median(stops), tp1: median(tp1), tpl: median(tpl), ntp: median(ntp), hold: median(hold), fit: n ? fit / n : null, n: n };
+    o.style = o.tpl == null ? "–" : o.ntp != null && o.ntp <= 1 ? (o.tpl <= 12 ? "Scalper" : "Single target")
+      : (o.tpl <= 15 && (o.hold == null || o.hold <= 45)) ? "Scalper" : (o.tpl >= 40 || (o.hold != null && o.hold >= 180)) ? "Swing-leaning" : "Intraday ladder";
+    return o;
+  }
+  function ruleSkips() {   // channel -> {copied, skipped, why: {chase, play, tp1}} from every Best of 10's own record on the page
+    var out = {};
+    b10Sources().forEach(function (src) {
+      var seen = {};
+      (src[2] || []).forEach(function (x) {
+        if (!x.grp || seen[x.grp + "|" + x.at]) return;
+        seen[x.grp + "|" + x.at] = 1;
+        var o = out[x.grp] || (out[x.grp] = { copied: 0, skipped: 0, chase: 0, play: 0, tp1: 0 }), note = String(x.note || "");
+        if (x.status === "Paused") return;   // the pause is shown on its own
+        // only the entry checks count (the $3 chase, no play left, removed at TP1); a skip for a full account, a loss
+        // limit or a paused strategy says nothing about the channel
+        if (x.status === "Removed") { o.skipped++; o.tp1++; }
+        else if (x.status === "Not copied" && /past the channel.s entry|more than \$\d/.test(note)) { o.skipped++; o.chase++; }
+        else if (x.status === "Not copied" && /no play left|past TP1/.test(note)) { o.skipped++; o.play++; }
+        else if (x.status !== "Not copied") o.copied++;
+      });
+    });
+    return out;
+  }
+  function pausedNow() {   // channels paused by Best of 10's mid-week check this week (the Sandbox's log)
+    var B = DATA.best10 || {}, p = {};
+    (B.pause_log || []).forEach(function (e) { if (!B.week || e.week === B.week) { if (e.event === "back") delete p[e.grp]; else p[e.grp] = e; } });
+    return p;
+  }
+  function anFinder(v) {
+    var capN = state.atp === "tp1" ? 1 : ({ "3": 3, "4": 4, "6": 6 })[state.atp] || 0, trail = state.ast !== "plain", all = state.aa === "all";
+    var segs = function (label, cur, opts, key) {
+      return el("div", { cls: "seg", role: "group", "aria-label": label, style: "margin-bottom:6px" }, [el("span", { cls: "note", style: "align-self:center;margin-right:4px", text: label + ":" })].concat(opts.map(function (o) {
+        var on = o[0] === cur;
+        return el("button", { type: "button", cls: "segb" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false", on: { click: function () { var c = {}; c[key] = o[0]; go(c, true); } } }, [o[1]]);
+      })));
+    };
+    var f = fx(), lb = ["2", "4", "8", "all"].indexOf(state.fl) >= 0 ? state.fl : "4";
+    var accts = liveAccounts().filter(function (a) { return a.section && PCODE[a.section]; });
+    var acc = accts.filter(function (a) { return a.section === state.fac; })[0] || accts[0] || null;
+    var size = ({ "4": 4, "5": 5, "6": 6 })[state.fn] || 5, sty = FIND_STYLES.some(function (s) { return s[0] === state.fsty; }) ? state.fsty : "";
+    v.appendChild(segs("Lookback", f.period ? "" : lb, f.period ? [["", "The filter bar’s period"]] : [["2", "2 weeks"], ["4", "4 weeks"], ["8", "8 weeks"], ["all", "Everything on the page"]], "fl"));
+    v.appendChild(segs("Style", sty, FIND_STYLES, "fsty"));
+    v.appendChild(segs("Positions per signal", capN ? (capN === 1 ? "tp1" : String(capN)) : "", [["", "Every TP"], ["6", "Up to 6"], ["4", "Up to 4"], ["3", "Up to 3"], ["tp1", "TP1 only"]], "atp"));
+    v.appendChild(segs("Stops", trail ? "" : "plain", [["", "Split trail (Best of 10 now)"], ["plain", "Held to TP or stop"]], "ast"));
+    v.appendChild(segs("Channels", all ? "all" : "", [["", "This week’s top 50"], ["all", "Every channel"]], "aa"));
+    if (accts.length) v.appendChild(segs("Suggest a set for", acc ? acc.section : "", accts.map(function (a) { return [a.section, a.label || a.section]; }), "fac"));
+    v.appendChild(segs("Set size", String(size), [["4", "4 channels"], ["5", "5 channels"], ["6", "6 channels"]], "fn"));
+    var now = Date.now(), from = f.period ? f.from : lb === "all" ? null : now - (+lb) * 7 * DAY, to = f.period ? f.to : null;
+    var inLb = function (t) { return (from == null || t >= from) && (to == null || t < to); };
+    var LS = legsAsB10(LEGS.filter(function (t) {
+      return (state.bf || t.source !== "backfill") && t.status === "closed" && t.r_multiple != null && (!capN || (t.leg || 1) <= capN) &&
+        t.grp !== "Consensus" && t.grp !== "Consensus ladder" && t.grp !== "Own signals" && inLb(tOf(t, "posted_at")) && sideOK(t.side) && sessOK(t) && b10OK(t);
+    }), trail);
+    var per = {};
+    LS.forEach(function (l) { (per[l.grp] = per[l.grp] || []).push(l); });
+    var top = DATA.top50 && (DATA.top50.rows || []).length ? DATA.top50.rows.map(function (r) { return r.grp; }) : null;
+    var names = (all || !top ? Object.keys(per) : top).filter(function (g) { return per[g] && chanOK(g); });
+    var t0 = from != null ? from : Math.min.apply(null, LS.map(function (l) { return tOf(l, "posted_at"); }).concat([now]));
+    var mid = t0 + ((to != null ? to : now) - t0) / 2, skips = ruleSkips(), pz = pausedNow(), out = [];
+    // every signal (any status) in the lookback, for the deletions and the overlap: channel -> [[time, side, deleted]]
+    var sigT = {};
+    SIGS.forEach(function (s) {
+      if (s.status === "superseded" || s.status === "incomplete" || (!state.bf && s.source === "backfill")) return;
+      var t = tOf(s, "posted_at"); if (t == null || isNaN(t) || !inLb(t)) return;
+      (sigT[s.grp] = sigT[s.grp] || []).push([t, s.side, /deleted/i.test(String(s.red_flags || "")) && !/corrected/i.test(String(s.red_flags || ""))]);
+    });
+    var overlap = function (g, set) {   // share of g's signals with a same-side signal of a channel in `set` within 15 minutes
+      var a = sigT[g] || [], hit = 0;
+      if (!a.length || !set.length) return 0;
+      a.forEach(function (x) { if (set.some(function (h) { return h !== g && (sigT[h] || []).some(function (y) { return y[1] === x[1] && Math.abs(y[0] - x[0]) <= 15 * 60e3; }); })) hit++; });
+      return hit / a.length;
+    };
+    names.forEach(function (g) {
+      var x = scoreStats(per[g]);
+      if (x.sig < 3) return;
+      var h1 = 0, h2 = 0, wk = {};
+      per[g].forEach(function (l) { var t = tOf(l, "posted_at"); if (t < mid) h1 += l._u; else h2 += l._u; var w = weekStartMs(t); wk[w] = (wk[w] || 0) + l._u; });
+      var wv = Object.keys(wk).map(function (k) { return wk[k]; }), cs = chanStatus(g), st = chanStyle(per[g]);
+      if (sty && st.style !== sty) return;
+      var sk = skips[g], dels = (sigT[g] || []).filter(function (y) { return y[2]; }).length, nAll = (sigT[g] || []).length;
+      var bad = SESS.filter(function (s) { var o = x.ses[s]; return o && Object.keys(o.n).length >= 6 && o.r < 0; });
+      var flags = [], why = [];
+      var blocked = cs && (cs.badge === "Blacklisted" || cs.badge === "Muted");
+      if (x.usd > 0) why.push(usd(x.usd, 0) + " on " + x.sig + " signals"); else flags.push("lost " + usd(x.usd, 0));
+      if (h1 > 0 && h2 > 0) why.push("up in both halves"); else flags.push("not up in both halves");
+      if (x.weeks) (x.up / x.weeks >= 0.5 ? why : flags).push(x.up + " of " + x.weeks + " weeks up");
+      if (st.fit != null && st.fit < 0.6) flags.push("stop wider than $12 on " + Math.round((1 - st.fit) * 100) + "% (we cut it to $10)");
+      if (x.usd > 0 && x.sig && x.usd / x.sig < 1) flags.push("under $1 a signal");
+      if (blocked) flags.push(cs.badge.toLowerCase() + " now");
+      if (pz[g]) flags.push("paused this week");
+      if (nAll >= 5 && dels / nAll >= 0.1) flags.push("deletes " + Math.round(dels / nAll * 100) + "% of signals");
+      if (sk && sk.copied + sk.skipped >= 4 && sk.skipped / (sk.copied + sk.skipped) >= 0.4) flags.push("our entry rules skip " + Math.round(sk.skipped / (sk.copied + sk.skipped) * 100) + "%");
+      if (bad.length) flags.push("lost in " + bad.map(function (s) { return SESS_SHORT[s]; }).join(", "));
+      var rec = x.sig >= 8 && x.usd > 0 && x.usd / x.sig >= 1 && h1 > 0 && h2 > 0 && x.weeks && x.up / x.weeks >= 0.5 && (st.fit == null || st.fit >= 0.6) && !blocked && !pz[g];
+      var score = x.usd * (x.weeks ? x.up / x.weeks : 0) * (h1 > 0 && h2 > 0 ? 1 : 0.5) * (blocked || pz[g] ? 0 : 1);
+      out.push({ g: g, x: x, h1: h1, h2: h2, worstWk: wv.length ? Math.min.apply(null, wv) : null, st: st, sk: sk, dels: dels, nAll: nAll, bad: bad,
+                 rec: rec, score: x.usd > 0 ? score : x.usd, flags: flags, why: why, cs: cs, top: !top || top.indexOf(g) >= 0 });
+    });
+    // the account's current picks, for the overlap column and the set
+    var picks = acc ? ((((DATA.top50 || {}).accounts || {})[acc.section] || {}).picked || []) : [];
+    out.forEach(function (o) { o.ovPick = picks.length ? overlap(o.g, picks) : null; });
+    // the suggested set: best score first, low overlap with what is in already
+    var set = [];
+    out.filter(function (o) { return o.rec && o.top; }).sort(function (a, b) { return b.score - a.score; }).forEach(function (o) {
+      if (set.length >= size) return;
+      var ov = overlap(o.g, set.map(function (s) { return s.g; }));
+      if (ov <= 0.35) { o.ovSet = ov; set.push(o); }
+    });
+    var scope = (f.period ? periodLabel() : lb === "all" ? "everything on the page (from " + dateOnly(DATA.window_from) + ")" : "the last " + lb + " weeks") +
+      (f.side ? ", " + (f.side === "buy" ? "buys" : "sells") + " only" : "") + (f.sess ? ", " + f.sess + " session only" : "") + (f.b10 ? ", only what Best of 10 copied" : "");
+    // --- the suggested set ---
+    if (acc) {
+      var setLS = [];
+      set.forEach(function (o) { per[o.g].forEach(function (l) { if (o.bad.indexOf(sessOf(l, "posted_at")) < 0) setLS.push(l); }); });
+      var T = setLS.length ? scoreStats(setLS) : null;
+      var body = set.length ? el("div", null, [
+        T ? kpiRow([["Signals", T.sig], ["Net", usd(T.usd, 0)], ["Worst drop", T.dd >= 0.5 ? usd(-T.dd, 0) : "$0"], ["Worst day", usd(T.worst, 0)], ["Weeks up", T.up + " of " + T.weeks],
+          [acc.max_open ? "Most open at once (account max " + acc.max_open + ")" : "Most open at once", T.most]]) : null,
+        T && acc.max_open && T.most > acc.max_open ? el("p", { cls: "note", style: "margin:-6px 0 10px", text: "More positions than " + (acc.label || acc.section) + " can hold at once: an account that is full skips new signals, which this doesn’t model. Positions per signal: Up to " + Math.min(6, Math.max(3, acc.max_open)) + " above gives a closer picture." }) : null,
+        table(["#", "Channel", "Style", "Sessions", "Net", "Weeks up", "Overlap with the set", "Why"], set.map(function (o, i) {
+          return [i + 1, o.g, o.st.style, o.bad.length ? SESS.filter(function (s) { return o.bad.indexOf(s) < 0; }).map(function (s) { return SESS_SHORT[s]; }).join(", ") : "All",
+            ucell(o.x.usd, 0), o.x.up + "/" + o.x.weeks, i ? Math.round((o.ovSet || 0) * 100) + "%" : "–", o.why.join("; ")];
+        }), { num: [0, 4, 5, 6], wrap: [7], cls: "compact" }),
+        el("p", { cls: "note", style: "margin-top:8px" }, [
+          "Now picked on " + (acc.label || acc.section) + ": " + (picks.length ? pickedText(acc.section) : "none (last week’s ranking)") + ". ",
+          DATA.top50 && (DATA.top50.rows || []).length ? el("button", { cls: "link", type: "button", text: "Open this set in Settings for " + (acc.label || acc.section), on: { click: function () {
+            var bits = {};
+            set.forEach(function (o) { var b = 0; SESS.forEach(function (s, k) { if (o.bad.indexOf(s) < 0) b |= 1 << k; }); if (b !== 15) bits[o.g] = b; });
+            var want = {}; set.forEach(function (o) { want[o.g] = 1; });
+            savePick50(acc.section, DATA.top50.fp, want, bits, {});
+            go({ v: "settings", ps: acc.section });
+          } } }) : null,
+          " It shows there as ticks not sent yet; the account’s owner (or the admin) applies them through the Telegram bot as usual."])])
+        : empty("No channel qualifies as recommended with these settings (try a longer lookback or every TP).");
+      if (set.length && set.length < size) body.insertBefore(el("p", { cls: "note", style: "margin:0 0 8px", text: "Only " + set.length + " channel" + (set.length === 1 ? "" : "s") + " qualif" + (set.length === 1 ? "ies" : "y") + " with these settings (recommended, and under 35% overlap with the ones already in)." }), body.firstChild);
+      v.appendChild(block("Suggested set for " + (acc.label || acc.section), "The best " + size + " recommended channels of this week’s top 50 (" + scope + ") that rarely trade the same moves (under 35% of signals on the same side within 15 minutes of a channel already in), each in every session except one where it clearly lost (6+ signals, net negative). Together = their positions pooled, in dollars at 0.01 lots per position. A guide, not a promise: the replays show last month’s best channels often don’t lead the next month, which is what the mid-week pause and stand-ins are for.", body));
+    }
+    // --- the ranked list ---
+    var keys = ["fd_g", "fd_sty", "fd_sig", "fd_win", "fd_usd", "fd_avg", "fd_h", "fd_up", "fd_worst", "fd_dd", "fd_fit", "fd_skip", "fd_ov", "fd_score"];
+    var sk2 = keys.indexOf(state.s) >= 0 ? state.s : "fd_score", desc = keys.indexOf(state.s) >= 0 ? state.d : true;
+    var val = function (o) {
+      return { fd_g: o.g.toLowerCase(), fd_sty: o.st.style, fd_sig: o.x.sig, fd_win: o.x.win, fd_usd: o.x.usd, fd_avg: o.x.sig ? o.x.usd / o.x.sig : null,
+               fd_h: Math.min(o.h1, o.h2), fd_up: o.x.weeks ? o.x.up / o.x.weeks + o.x.weeks * 1e-6 : 0, fd_worst: o.worstWk, fd_dd: -o.x.dd, fd_fit: o.st.fit,
+               fd_skip: o.sk && o.sk.copied + o.sk.skipped ? o.sk.skipped / (o.sk.copied + o.sk.skipped) : null, fd_ov: o.ovPick, fd_score: (o.rec ? 1e9 : 0) + o.score }[sk2];
+    };
+    out.sort(function (a, b) { var p = val(a), q = val(b); p = p == null ? -1e18 : p; q = q == null ? -1e18 : q; return desc ? (p < q ? 1 : p > q ? -1 : 0) : (p < q ? -1 : p > q ? 1 : 0); });
+    if (keys.indexOf(state.s) < 0) state.s = "fd_score";
+    var inSet = {}; set.forEach(function (o) { inSet[o.g] = 1; });
+    var rows = out.map(function (o) {
+      var name = el("span", null, [document.createTextNode(o.g)].concat(o.cs ? [el("span", { cls: o.cs.cls, title: o.cs.note, text: o.cs.badge })] : [])
+        .concat(pz[o.g] ? [el("span", { cls: "badge", title: "Paused by Best of 10’s mid-week check this week", text: "Paused" })] : [])
+        .concat(picks.indexOf(o.g) >= 0 ? [el("span", { cls: "badge folder", title: "Picked now on " + (acc ? acc.label || acc.section : "the account"), text: "Picked" })] : []));
+      var verdict = o.rec ? el("span", { cls: "win", text: inSet[o.g] ? "✓ In the set" : "✓ Recommended" }) : o.x.usd <= 0 && o.h1 < 0 && o.h2 < 0 ? el("span", { cls: "loss", text: "Avoid" }) : "Watch";
+      var sk = o.sk, skp = sk && sk.copied + sk.skipped ? Math.round(sk.skipped / (sk.copied + sk.skipped) * 100) + "% (" + sk.skipped + "/" + (sk.copied + sk.skipped) + ")" : "–";
+      return [verdict, name, o.st.style, o.x.sig, o.x.win == null ? "–" : pct(Math.round(o.x.win * 1000), 1000), ucell(o.x.usd, 0), ucell(o.x.sig ? o.x.usd / o.x.sig : null),
+        el("span", null, [ucell(o.h1, 0), document.createTextNode(" / "), ucell(o.h2, 0)]), o.x.up + "/" + o.x.weeks, ucell(o.worstWk, 0), o.x.dd >= 0.5 ? usd(-o.x.dd, 0) : "$0",
+        o.st.stop == null ? "–" : "$" + o.st.stop.toFixed(1) + (o.st.fit != null ? " (" + Math.round(o.st.fit * 100) + "% ≤ $12)" : ""),
+        o.st.tp1 == null ? "–" : "$" + o.st.tp1.toFixed(0) + " → $" + o.st.tpl.toFixed(0) + (o.st.hold != null ? ", ~" + Math.round(o.st.hold) + " min" : ""),
+        SESS.map(function (s) { var c = o.x.ses[s]; return c ? SESS_SHORT[s] + " " + signed(c.r, 0) : null; }).filter(Boolean).join(" · ") || "–",
+        skp, o.nAll ? Math.round(o.dels / o.nAll * 100) + "%" : "–", o.ovPick == null ? "–" : Math.round(o.ovPick * 100) + "%", (o.why.concat(o.flags.map(function (x) { return "⚠ " + x; }))).join("; ")];
+    });
+    v.appendChild(block("Every channel, ranked", "One row per channel with 3+ closed signals (" + scope + "), scored the way Best of 10 copies it: " +
+      (capN === 1 ? "TP1 only" : capN ? "up to TP" + capN : "every TP") + ", stops capped at $10" + (trail ? ", the split trail" : "") + "; $ at 0.01 lots per position, after costs. " +
+      "Recommended = 8+ signals, +$1 or more a signal, up in both halves of the lookback (Halves), up in at least half its weeks, its stop within $12 on 60%+ of signals (we cut stops to $10), not muted, blacklisted or paused. " +
+      "Style from its typical stop, first → last target and how long the last position ran. Skipped by our rules = Best of 10’s entry checks ($3 chase, no play left, removed at TP1) on its signals, where a Best of 10 saw them (their records on the page; a full account or a loss limit doesn’t count). " +
+      "Deleted = its signals flagged deleted by the group. Overlap = its signals on the same side within 15 min of a channel picked now on " + (acc ? acc.label || acc.section : "the account") + ". Sessions in R.",
+      out.length ? table(["Verdict", "Channel", "Style", "Signals", "Win rate", "Net", "Per signal", "Halves", "Weeks up", "Worst week", "Worst drop", "Stop", "Targets, hold", "Sessions (R)", "Skipped by our rules", "Deleted", "Overlap", "Why"], rows,
+        { num: [3, 4, 5, 6, 8, 9, 10, 14, 15, 16], wrap: [17], cls: "compact", keys: ["fd_score", "fd_g", "fd_sty", "fd_sig", "fd_win", "fd_usd", "fd_avg", "fd_h", "fd_up", "fd_worst", "fd_dd", "fd_fit", null, null, "fd_skip", null, "fd_ov", null] })
+        : empty("No channel has 3+ closed signals with these settings.")));
   }
 
   // ===== Stops & targets =====
@@ -2598,9 +2987,12 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     bar.appendChild(select("Buy or sell", state.fs, [["", "Buys and sells"], ["buy", "Buys only"], ["sell", "Sells only"]], function (val) { go({ fs: val }, true); }));
     bar.appendChild(select("Session", f.sess, [["", "All sessions"]].concat(SESS.map(function (x) { return [x, x + " (" + SESS_NBO_SHORT[x] + " Nairobi)"]; })), function (val) { go({ fss: val }, true); }));
     bar.appendChild(select("Result", state.fr, RESULTS, function (val) { go({ fr: val }, true); }));
+    var bs = b10Sources();
+    if (bs.length) bar.appendChild(select("Best of 10", f.b10, [["", "All signals"]].concat(bs.map(function (x) { return [x[0], "Only what " + x[1] + " copied"]; })),
+      function (val) { go({ fb: val }, true); }));
     if (so) bar.appendChild(select("Strategy", so.value, so.opts, function (val) { var c = {}; c[so.key] = val; go(c, true); }));
     if (f.any || (so && so.value)) bar.appendChild(el("button", { cls: "link", type: "button", text: "Clear filters", on: { click: function () {
-      PICK.q = ""; PICK.top = 0; go({ fp: "", ff: "", ft: "", fc: [], fs: "", fr: "", fg: "", sv: "", fss: "" }, true); } } }));
+      PICK.q = ""; PICK.top = 0; go({ fp: "", ff: "", ft: "", fc: [], fs: "", fr: "", fg: "", sv: "", fss: "", fb: "" }, true); } } }));
     if (PICK.open) {   // ticking a channel redraws the page: keep its list open where it was
       picker._restored = true; picker.open = true;
       var panel = picker.querySelector(".pick");
@@ -2617,6 +3009,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (f.side) parts.push(f.side === "buy" ? "buys only" : "sells only");
     if (f.sess) parts.push(f.sess + " session (posted " + SESS_NBO_SHORT[f.sess] + " Nairobi)");
     if (f.res) parts.push(RESULTS.filter(function (r) { return r[0] === f.res; })[0][1].toLowerCase());
+    if (f.b10) {
+      var b10s = b10Sources().filter(function (x) { return x[0] === f.b10; })[0], b10f = b10From(f.b10);
+      parts.push("only the channel signals " + b10s[1] + " copied" + (b10f ? " (its record here starts " + nbDate(b10f) + ")" : ""));
+    }
     var sg = stratFilter();
     if (sg && so) parts.push(so.opts.filter(function (o) { return o[0] === sg; })[0][1].toLowerCase());
     if (!parts.length) return;
@@ -2708,7 +3104,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var sigs = DATA.trades || [], legs = DATA.legs || sigs;
     SIGS = sigs.filter(function (t) { return !t.consensus; }); CSIGS = sigs.filter(function (t) { return t.consensus; });
     LEGS = legs.filter(function (t) { return !t.consensus; }); CLEGS = legs.filter(function (t) { return t.consensus; });
-    CSUP = {}; CLEG_BY = {}; MEMO = {};
+    CSUP = {}; CLEG_BY = {}; MEMO = {}; B10IX = {};
     CSIGS.forEach(function (t) { var sp = t.meta && t.meta.supporters; if (sp && /^0_/.test(t.id)) CSUP[t.id] = sp.map(function (x) { return x.grp; }); });
     CLEGS.forEach(function (l) { (CLEG_BY[l.trade_id] = CLEG_BY[l.trade_id] || []).push(l); });
   }
@@ -2763,6 +3159,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["ladder_lock", "U", "bool", "Ladder profit lock", "Move the ladder’s stop into profit once it is close to its TP (the demo’s rule)."],
     ["ladder_news", "V", "int", "Ladder news filter (min)", "No ladder order this many minutes either side of high-impact US news. Not set = the consensus’s. 0 = off."],
     ["best10_news", "Y", "int", "Best of 10 news filter (min)", "No Best of 10 order this many minutes either side of high-impact US news. Not set = the consensus’s. 0 = off."],
+    // 26 Nov 2026 (Arnold: "Okay"): the mid-week pause and the channel rules on hand-picked channels, with top-10 stand-ins
+    ["best10_rules", "X", "bool", "Safety rules on picked channels", "On (default): a picked channel that is paused (under 50% of its 6+ positions won this week; back at 65%) or muted / blacklisted for deleting signals is not copied, and the best free channel of this week’s top 10 stands in until it is back. Off: picked channels are copied whatever."],
     // 24 Nov 2026 (Arnold: "account wide regardless of strategy ... a resume button for anyone who wants to trade. Default is pause")
     ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 13:00 – 18:00 Nairobi (05:00 – 10:00 New York: London afternoon, US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."]];
   // the Settings tab's layout (23 Nov 2026, Arnold's sheet: "The settings tab..should appear in a similar format.
@@ -2787,10 +3185,12 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       "lots", "ladder_lots", "best10_lots"],
     ["Channels to copy", "Consensus: this week’s voting channels; 2 or more must agree. Best of 10: how many of last week’s best channels it copies, 1 – 10 (a change re-ranks the week at once).",
       function () { return "Voting channels (2+ agree)"; }, function () { return "Follows the consensus"; }, "best10_top"],
-    ["Manually selected channels", "Channels picked by hand for Best of 10 from this week’s top 50 (the list below the table), copied whatever their ranking, the channel rules or the mid-week pause. None = last week’s ranking.",
+    ["Manually selected channels", "Channels picked by hand for Best of 10 from this week’s top 50 (the list below the table), copied whatever their ranking; the mid-week pause and the channel rules apply unless the next row is off. None = last week’s ranking.",
       function () { return "–"; }, function () { return "–"; }, function (a) {
         var p = ((DATA.top50 || {}).accounts || {})[a.section] || {}, n = (p.picked || []).length;
         return n ? n + " picked" + (p.changed_by ? " by " + p.changed_by : "") + ": " + pickedText(a.section, p.picked) : "None: last week’s ranking (pick below)"; }],
+    ["Safety rules on picked channels", "Best of 10 picks: a paused pick (under 50% wins this week, back at 65%) or one muted / blacklisted for deleting signals is not copied; the best free channel of this week’s top 10 stands in until it is back. Off = picks copied whatever.",
+      function () { return "Channel rules apply (voters)"; }, function () { return "Follows the consensus"; }, "best10_rules"],
     ["News filter", "No new order this many minutes either side of high-impact US news. 0 = off. Ladder and Best of 10 follow the consensus’s until set here.", "news_min", "ladder_news", "best10_news"],
     ["Stop loss", "Consensus and ladder: this many dollars from the entry (10 = 100 pips), $1 – $50. Best of 10 keeps each channel’s own stop.",
       "stop_usd", "ladder_stop", function (a) { var m = fixedOf(a).b10_max_sl; return "Channel’s own stop" + (m ? " (at most $" + m + ")" : ""); }],
@@ -2827,10 +3227,14 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var out = parts.join("_");   // Telegram allows 64 characters: a long one drops the underscores (portal.encode does the same)
     return out.length <= 64 ? out : parts[0] + parts.slice(1).join("");
   }
+  // The Settings tab (26 Nov 2026 revamp, Arnold: "revamp the settings tab to accommodate this dynamism", "check for best
+  // website styles (easy to use) and adopt"): accounts as tabs with their trading state, an at-a-glance strip, jump links
+  // to the sections, changed values highlighted, the Best of 10 channel builder, and ONE sticky bar at the bottom that
+  // lists what isn't sent yet with a button for the settings and one for the channels (two confirmations in Telegram).
   function viewSettings(v) {
     var accts = liveAccounts().filter(function (a) { return a.portal && PCODE[a.section]; }), bot = DATA.portal_bot;
-    v.appendChild(el("p", { style: "margin:0 0 14px;max-width:80ch" }, [el("strong", { text: "Account settings: " }),
-      "each live account’s owner changes their own account. Pick the account, change the settings, then press “Apply in Telegram”: the tracker’s bot shows the changes and applies them only when the account’s owner (or the admin) taps Apply. The account uses them within a few seconds, no restart. Shared rules (which channels vote and what makes a consensus, the channel rules, the demo, the Sandbox) stay with the admin."]));
+    v.appendChild(el("p", { style: "margin:0 0 14px;max-width:80ch" }, [el("strong", { text: "Account settings. " }),
+      "Choose an account, change what you need, then send from the bar at the bottom: the tracker’s bot shows the changes in Telegram and applies them only when the account’s owner (or the admin) taps Apply. No restart needed. Shared rules (voting channels, channel rules, the demo, the Sandbox) stay with the admin."]));
     if (!accts.length) { v.appendChild(empty("No live account reports its settings yet (the live traders show them after their next restart).")); return; }
     var sec = accts.some(function (a) { return a.section === state.ps; }) ? state.ps : accts[0].section;
     var a = accts.filter(function (x) { return x.section === sec; })[0], cur = a.portal.values || {}, maxL = a.portal.max_lots || 0.1;
@@ -2839,9 +3243,31 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var FBY = {}; PFIELDS.forEach(function (f) { FBY[f[0]] = f; });
     var want = {}; FIELDS.forEach(function (f) { want[f[0]] = cur[f[0]]; });
     if (cur.lots_rule || want.lots == null) want.lots = cur.lots;
-    var pick = el("select", { "aria-label": "Account", on: { change: function (e) { go({ ps: e.target.value }, true); } } },
-      accts.map(function (x) { return el("option", { value: x.section, selected: x.section === sec ? "selected" : null, text: x.label + " (" + (x.server || "") + " " + (x.account || "") + ")" }); }));
-    v.appendChild(el("div", { style: "margin-bottom:14px" }, [el("strong", { text: "Account: " }), pick]));
+    var dirtyNow = function () { return false; };   // set below, once the bar exists
+    // 1. accounts as tabs, each with its trading state
+    v.appendChild(el("div", { cls: "seg acctseg", role: "tablist", "aria-label": "Account" }, accts.map(function (x) {
+      var on = (x.portal.values || {}).trading !== false, me = x.section === sec;
+      return el("button", { type: "button", cls: "segb" + (me ? " on" : ""), role: "tab", "aria-selected": me ? "true" : "false",
+        title: (x.server || "") + " " + (x.account || ""), on: { click: function () {
+          if (me) return;
+          if (dirtyNow() && !window.confirm("Settings changed for " + a.label + " and not sent will be lost (channel changes are kept as a draft). Switch to " + x.label + "?")) return;
+          go({ ps: x.section }, true); } } },
+        [el("span", { cls: "dot" + (on ? "" : " off"), "aria-hidden": "true" }), x.label, el("span", { cls: "sub", text: on ? "trading" : "paused" })]);
+    })));
+    // 2. at a glance
+    var ap = ((DATA.top50 || {}).accounts || {})[sec] || {}, npk = (ap.picked || []).length, nx = (ap.exclude || []).length, topN = +cur.best10_top || 10;
+    var b10Now = cur.best10 === false ? "Off" : "best10" in cur ? (npk ? (ap.top ? "Top " + topN + " + " + npk : npk + " own") : "Top " + topN) + (nx ? " · " + nx + " never" : "") : "–";
+    var glance = [["Trading", cur.trading === false ? "Paused" : "On"]];
+    if ("max_open" in cur) glance.push(["Max open", cur.max_open]);
+    if ("max_risk" in cur) glance.push(["Risk per order", cur.max_risk + "%"]);
+    if ("day_limit" in cur) glance.push(["Daily loss limit", cur.day_limit + "%"]);
+    if ("best10_max_per_channel" in cur) glance.push(["Per channel", cur.best10_max_per_channel || "No cap"]);
+    glance.push(["Best of 10", b10Now]);
+    v.appendChild(kpiRow(glance));
+    var JUMPS = [["set-acct", "Account"], ["set-strat", "Strategies"], ["set-b10", "Best of 10 channels"], ["set-help", "Reset & help"]];
+    v.appendChild(el("nav", { cls: "jump", "aria-label": "Sections" }, [el("span", { cls: "note", text: "Jump to:" })].concat(JUMPS.map(function (j) {
+      return el("button", { type: "button", cls: "link", on: { click: function () { var t = document.getElementById(j[0]); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); } } }, [j[1]]);
+    }))));
     var note = function (key, acct) {   // default and "set here" for the chosen account
       var p = (acct || a).portal, setHere = (p.set_here || []).indexOf(key) >= 0, dft = (p.defaults || {})[key];
       if (key === "lots" && dft === "rule" && p.defaults.lots_text) dft = { text: p.defaults.lots_text };
@@ -2855,11 +3281,14 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var f = FBY[key];
       if (!f || !(key in cur)) return el("span", { cls: "note", text: "– (after the account’s next restart)" });
       var ctl, lockWhy = (a.portal.locked || {})[key];
-      if (f[2] === "bool") {
-        ctl = el("input", { type: "checkbox", "aria-label": f[3], on: { change: function (e) { want[key] = e.target.checked; update(); } } });
+      if (f[2] === "bool") {   // a switch: on / off at a glance
+        ctl = el("input", { type: "checkbox", role: "switch", cls: "switch", "aria-label": f[3], on: { change: function (e) { want[key] = e.target.checked; update(); } } });
         ctl.checked = !!want[key];
         if (lockWhy && !cur[key]) { ctl.disabled = true; ctl.title = "Locked: " + lockWhy; }   // can always be switched off, never on while locked
-        ctl = el("label", null, [ctl, key === "trading" ? " On" : " Yes"]);
+        var lab = el("span", { text: "" });
+        var sync = function () { lab.textContent = ctl.checked ? (key === "trading" ? " On" : " Yes") : (key === "trading" ? " Paused" : " No"); };
+        ctl.addEventListener("change", sync); sync();
+        ctl = el("label", { cls: "swl" }, [ctl, lab]);
       } else if (f[2] === "lots") {   // Lots, and Best of 10 lots (its own size since 22 Nov 2026)
         var isAuto = String(want[key]) === "auto";
         var num = el("input", { type: "number", min: "0.01", max: String(maxL), step: "0.01", style: "width:5.5em", "aria-label": f[3], on: { input: function (e) { want[key] = e.target.value; update(); } } });
@@ -2875,21 +3304,20 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         ctl = el("span", null, [unit, inp, suf]);
       }
       var n = note(key);
-      return n ? el("span", null, [ctl, el("div", { cls: "note", style: "font-size:12px;margin-top:2px", text: n })]) : ctl;
+      return el("span", { "data-pk": key }, [ctl, n ? el("div", { cls: "note", style: "font-size:12px;margin-top:2px", text: n }) : null]);
     };
     var cols = function (w) { return el("colgroup", null, w.map(function (x) { return el("col", { style: "width:" + x + "%" }); })); };
-    // 1. General: the whole account, for the account chosen in the dropdown (23 Nov 2026, Arnold: "The drop down for
-    // using an account remains, however the format layout remains to allow viewing all strategies in a table"): the
-    // same columns as the strategies table below, its value across the three strategy columns (it applies to all)
+    // 3. Account: the whole account
     var gb = el("tbody", null, PGEN.filter(function (k) { return FBY[k]; }).map(function (k) {
       return el("tr", null, [el("td", null, [el("strong", { text: FBY[k][3] })]), el("td", { colspan: "3" }, [control(k)]),
         el("td", { cls: "wrap note", text: PGEN_TIP[k] || FBY[k][4] })]);
     }));
-    v.appendChild(block("General: " + a.label, "Affects the entire account, whatever strategies are in use.",
+    var b1 = block("Account: " + a.label, "Affects the entire account, whatever strategies are in use.",
       el("div", { cls: "scroll" }, [el("table", { cls: "psettings pgrid" }, [cols([16, 19, 17, 19, 29]),
         el("thead", null, [el("tr", null, [el("th", { scope: "col", text: "Setting" }), el("th", { scope: "col", colspan: "3", text: "All strategies" }),
-          el("th", { scope: "col", text: "What it does" })])]), gb])])));
-    // 2. Strategies: a column each, for the chosen account
+          el("th", { scope: "col", text: "What it does" })])]), gb])]));
+    b1.id = "set-acct"; v.appendChild(b1);
+    // 4. Strategies: a column each
     var sb = el("tbody", null, PSTRAT.map(function (r) {
       var cells = [el("td", null, [el("strong", { text: r[0] })])], span = r[5] || 1;
       var cell = function (c, n) {
@@ -2905,25 +3333,20 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       cells.push(el("td", { cls: "wrap note", text: r[1] }));
       return el("tr", null, cells);
     }));
-    v.appendChild(block("Strategies: " + a.label, "What trades the account and each strategy’s own rules. " +
+    var b2 = block("Strategies: " + a.label, "What trades the account and each strategy’s own rules. " +
       (a.portal.changed_by ? "Last changed by " + a.portal.changed_by + (a.portal.changed_at ? ", " + when(a.portal.changed_at) : "") + "." : "Not changed here yet: everything comes from config.ini.") +
       (a.updated ? " Reported " + when(a.updated) + "." : ""),
       el("div", { cls: "scroll" }, [el("table", { cls: "psettings pgrid" }, [cols([16, 19, 17, 19, 29]), el("thead", null, [el("tr", null,
-        ["Setting", "Consensus", "Ladder", "Best of 10", "What it does"].map(function (h) { return el("th", { scope: "col", text: h }); }))]), sb])])));
-    var msg = el("p", { cls: "note", style: "margin:8px 0" }), btn = el("button", { type: "button", cls: "link", style: "font-size:16px" }, ["Apply settings in Telegram"]);
-    var pickWarn = el("p", { cls: "note", style: "margin:6px 0;color:var(--loss);font-weight:600;display:none" });
-    var pickDirty = false, nPicked = 0, settingsReady = false;
-    var pickBlock = null;   // Best of 10's channels picked by hand for this account (23 Nov 2026), below the settings' buttons
+        ["Setting", "Consensus", "Ladder", "Best of 10", "What it does"].map(function (h) { return el("th", { scope: "col", text: h }); }))]), sb])]));
+    b2.id = "set-strat"; v.appendChild(b2);
+    // 5. Best of 10 channels: what it copies, your own channels, the ones never copied
+    var pk = { dirty: false, ok: false, text: "", send: null, undo: null }, settingsReady = false, pickBlock = null;
     if (DATA.top50 && (DATA.top50.rows || []).length) {
-      var ap = (DATA.top50.accounts || {})[sec] || {};
-      nPicked = (ap.picked || []).length;
-      pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], sessions: ap.sessions || {}, sides: ap.sides || {}, changed_by: ap.changed_by, changed_at: ap.changed_at, on: !!cur.best10,
-        onDraft: function (dirty, n) {
-          pickDirty = dirty;
-          pickWarn.style.display = dirty ? "" : "none";
-          pickWarn.textContent = dirty ? "Channel picks ticked below are NOT sent by this button (" + n.length + " ticked): send them with “Apply channel picks in Telegram” in the list below, then Start and Apply in the bot." : "";
-          if (settingsReady) update();   // not while this list is being built: the panel isn't there yet
-        } });
+      pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], sessions: ap.sessions || {}, sides: ap.sides || {},
+        top: !!ap.top, exclude: ap.exclude || [], changed_by: ap.changed_by, changed_at: ap.changed_at, on: cur.best10 !== false, topN: topN,
+        ranking: (a.best10 && !a.best10.off && a.best10.ranking) || [],   // the account's own weekly top N (26 Nov 2026)
+        onDraft: function (st) { pk = st; if (settingsReady) update(); } });
+      pickBlock.id = "set-b10"; v.appendChild(pickBlock);
     }
     var changedKeys = function () {
       return FIELDS.filter(function (f) { var k = f[0];
@@ -2932,6 +3355,28 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         if (f[2] === "lots") return String(want[k]) !== String(cur[k]);
         return +want[k] !== +cur[k]; }).map(function (f) { return f[0]; });
     };
+    // 6. Reset & help
+    var resettable = (a.portal.set_here || []).filter(function (k) { return k !== "trading"; });
+    var rbtn = el("button", { type: "button", cls: "btns" }, ["Reset to defaults"]);
+    rbtn.disabled = (!resettable.length && !npk && !nx) || !bot;
+    rbtn.title = resettable.length || npk || nx ? "Back to config.ini for: " + resettable.map(function (k) { return FBY[k] ? FBY[k][3] : k; }).concat(npk || nx ? ["Best of 10 channels chosen here"] : []).join(", ")
+      : "Nothing is set here: the account already uses the default settings.";
+    rbtn.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=s" + PCODE[sec] + "_X", "_blank"); });
+    var b3 = block("Reset & help", "", el("div", { cls: "panel" }, [rbtn,
+      el("p", { cls: "note", style: "margin:8px 0" }, [resettable.length || npk || nx
+        ? "Every setting changed here for " + a.label + " goes back to config.ini (" + resettable.length + " now)" + (npk || nx ? " and Best of 10 goes back to the weekly top " + topN + " (your channels and exclusions cleared)" : "") + ". Trading on/pause stays as it is. Confirm in Telegram."
+        : "Nothing to reset: " + a.label + " already uses the default settings."]),
+      el("p", { cls: "note", text: "First time? Send /start to " + (bot ? "@" + bot : "the tracker’s bot") + " in Telegram; the admin links you to your account. In Telegram you can also use /settings, /pause, /resume and /reset." })]));
+    b3.id = "set-help"; v.appendChild(b3);
+    // 7. the sticky bar: what isn't sent yet
+    var sMsg = el("div", { cls: "what" }), sBtn = el("button", { type: "button", cls: "btnp" }, ["Send settings"]);
+    var pMsg = el("div", { cls: "what" }), pBtn = el("button", { type: "button", cls: "btnp" }, ["Send channels"]);
+    var undoAll = el("button", { type: "button", cls: "btns" }, ["Undo all"]);
+    var pRow = el("div", { cls: "row" }, [pMsg, pBtn]), sRow = el("div", { cls: "row" }, [sMsg, sBtn]);
+    var bar = el("div", { cls: "savebar", role: "region", "aria-label": "Unsent changes" }, [sRow, pickBlock ? pRow : null,
+      el("div", { cls: "row hint" }, [el("span", { cls: "note", style: "flex:1 1 260px;font-size:12px", text: "Each button opens Telegram: tap Start, then Apply. Settings and channels are confirmed separately." }), undoAll])]);
+    v.appendChild(bar);
+    dirtyNow = function () { return changedKeys().length > 0; };
     function update() {
       var ch = changedKeys(), bad = [];
       if (ch.indexOf("lots") >= 0 && want.lots !== "auto" && !(+want.lots >= 0.01 && +want.lots <= maxL)) bad.push("Lots must be 0.01 – " + maxL + ".");
@@ -2950,33 +3395,30 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (ch.indexOf("ladder_stop") >= 0 && !(+want.ladder_stop >= 1 && +want.ladder_stop <= 50)) bad.push("Ladder stop must be $1 – $50.");
       var riskCap = +((a.portal.defaults || {}).max_risk) || 100;
       if (ch.indexOf("max_risk") >= 0 && !(+want.max_risk >= 1 && +want.max_risk <= riskCap)) bad.push("Max risk per order must be 1 – " + riskCap + "%" + (riskCap < 100 ? " (the admin’s cap: it can be lowered, not raised)." : "."));
-      btn.disabled = !ch.length || bad.length > 0 || !bot;
-      var b10warn = ch.indexOf("best10") >= 0 && want.best10 && !nPicked && !pickDirty ?
-        " Best of 10 has no channels picked for " + a.label + ": it will copy last week’s ranking. To copy only your own channels, pick and send them in the list below FIRST." : "";
-      msg.textContent = bad.length ? bad.join(" ") : !ch.length ? "Change a setting above to apply it to " + a.label + "." :
-        !bot ? "The tracker’s bot isn’t running, so changes can’t be sent yet." :
-        a.label + ": " + ch.map(function (k) { return FBY[k][3]; }).join(", ") + ". Telegram opens with them; tap Start, then Apply." + b10warn;
+      // changed values are highlighted where they are
+      v.querySelectorAll("[data-pk]").forEach(function (n) { var td = n.closest("td"); if (td) td.classList.toggle("chg", ch.indexOf(n.getAttribute("data-pk")) >= 0); });
+      sBtn.disabled = !ch.length || bad.length > 0 || !bot;
+      sMsg.textContent = bad.length ? "Settings: " + bad.join(" ") : !ch.length ? "Settings: no changes." :
+        !bot ? "Settings: the tracker’s bot isn’t running, so changes can’t be sent yet." :
+        "Settings, not sent yet (" + ch.length + "): " + ch.map(function (k) { return FBY[k][3]; }).join(", ") + ".";
+      sMsg.className = "what" + (bad.length ? " bad" : ch.length ? " dirty" : "");
+      if (pickBlock) {
+        pMsg.textContent = pk.text; pMsg.className = "what" + (pk.dirty ? (pk.ok ? " dirty" : " bad") : "");
+        pBtn.disabled = !pk.dirty || !pk.ok || !bot;
+      }
+      undoAll.disabled = !ch.length && !pk.dirty;
+      sRow.className = "row" + (ch.length || bad.length ? "" : " clean");   // with something to send, only those lines show
+      pRow.className = "row" + (pk.dirty ? "" : " clean");
+      bar.className = "savebar" + (ch.length || pk.dirty ? " dirty" : "");
     }
-    btn.addEventListener("click", function () {
+    sBtn.addEventListener("click", function () {
       var vals = {}; changedKeys().forEach(function (k) { vals[k] = want[k]; });
       window.open("https://t.me/" + bot + "?start=" + portalPayload(sec, vals), "_blank");
     });
-    // "Reset to defaults" (21 Nov): everything set here goes back to config.ini; trading on/pause is kept
-    var resettable = (a.portal.set_here || []).filter(function (k) { return k !== "trading"; });
-    var rbtn = el("button", { type: "button", cls: "link", style: "font-size:16px;margin-left:24px" }, ["Reset to defaults"]);
-    var npick = ((((DATA.top50 || {}).accounts || {})[sec] || {}).picked || []).length;   // reset clears them too
-    rbtn.disabled = (!resettable.length && !npick) || !bot;
-    rbtn.title = resettable.length || npick ? "Back to config.ini for: " + resettable.map(function (k) { return FBY[k] ? FBY[k][3] : k; }).concat(npick ? ["Best of 10 channels picked by hand"] : []).join(", ")
-      : "Nothing is set here: the account already uses the default settings.";
-    rbtn.addEventListener("click", function () { window.open("https://t.me/" + bot + "?start=s" + PCODE[sec] + "_X", "_blank"); });
-    var rnote = el("p", { cls: "note", style: "margin:4px 0 8px" }, [resettable.length || npick
-      ? "Reset to defaults: every setting changed here for " + a.label + " goes back to config.ini (" + resettable.length + " now)" + (npick ? " and Best of 10’s " + npick + " picked channels are cleared" : "") + ". Trading on/pause stays as it is. Confirm in Telegram."
-      : "Reset to defaults: nothing to reset, " + a.label + " already uses the default settings."]);
-    v.appendChild(el("div", { cls: "panel" }, [btn, rbtn, msg, pickWarn, rnote,
-      el("p", { cls: "note", text: "First time? Send /start to " + (bot ? "@" + bot : "the tracker’s bot") + " in Telegram; the admin links you to your account. In Telegram you can also use /settings, /pause, /resume and /reset." })]));
+    pBtn.addEventListener("click", function () { if (pk.send) pk.send(); });
+    undoAll.addEventListener("click", function () { if (pk.undo) pk.undo(); savePick50(sec, null, null); render(); });
     settingsReady = true;
     update();
-    if (pickBlock) v.appendChild(el("div", { style: "margin-top:18px" }, [pickBlock]));
   }
 
   function render() {
