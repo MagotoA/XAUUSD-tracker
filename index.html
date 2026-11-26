@@ -172,6 +172,10 @@ table.b10t tr.in td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 table.b10t tr.never td { opacity: .55; }
 table.b10t tr.never td:first-child { opacity: 1; box-shadow: inset 3px 0 0 var(--loss); }
 .sesb.act { min-width: 74px; }
+.badge.extra { background: #E3ECF7; color: #2D5C8E; }
+.badge.extra.off { background: var(--chip); color: var(--muted); }
+.chip.xtra { background: #E3ECF7; color: #2D5C8E; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .badge.extra, .chip.xtra { background: #1E2E42; color: #9DC1EA; } }
 .sesb.never.on { background: var(--loss-soft); border-color: var(--loss); color: var(--loss); font-weight: 600; }
 .btnp { font: inherit; font-size: 14px; font-weight: 600; padding: 7px 16px; border-radius: 8px; border: 1px solid var(--gold); background: var(--gold); color: var(--surface); cursor: pointer; white-space: nowrap; }
 .btns { font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--rule-strong); background: var(--surface); color: var(--ink); cursor: pointer; white-space: nowrap; }
@@ -1509,25 +1513,31 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (st.status === "muted") return { badge: "Muted", cls: "badge", note: "Muted for 24 h, not copied: " + why };
     return { badge: st.folder || "Blacklist", cls: "badge folder", note: "In the " + (st.folder || "Blacklist") + " folder (still copied): " + why };
   }
-  // Best of 10's channel builder (26 Nov 2026 revamp, Arnold: picks are ADDITIONAL channels, "Top 10 optional",
-  // "select best of 10 but exclude some channels", "revamp the settings tab to accommodate this dynamism", "best website
-  // styles (easy to use)"): one choice of what Best of 10 copies (the weekly top N / top N + my channels / only my
-  // channels), a live summary of what will be copied, a searchable and filterable list with Add and Never per channel,
-  // and one sticky bar to send. tgt: null = the Sandbox (/start p|t|v0|w0...), or {sec, label, picked, sessions, sides,
-  // top, exclude, changed_by, changed_at, on, topN, onDraft} = a live account (/start q|u|v|w<code>...).
+  // Best of 10's channel builder (26 Nov 2026; 27 Nov 2026: Arnold, "a tab here to ease filtering..like Best of 10 + Extra
+  // + my channesls", "The extra is dependent on what an account selects in the settings", "While the ranking is
+  // automated....possible to allow an owner to select the sessions and buy/sells?"): one tab row for what Best of 10
+  // copies (the weekly top N, the strong candidates = "Extra", the owner's own channels, in any of the useful mixes), a
+  // live summary, a searchable and filterable list with Add / Never per channel and sessions / side for EVERY copied
+  // channel, and one sticky bar to send. The link (picks.encode z...) carries it all; how many Extra = the account's
+  // setting (Strategies: "Strong candidates"; the Sandbox: best3.ini). tgt: null = the Sandbox, or {sec, label, picked,
+  // sessions, sides, top, extras, exclude, changed_by, changed_at, on, topN, ranking, extraK(), onDraft} = a live account.
   function b10Picker(T, statusOf, tgt) {
     var key = tgt ? tgt.sec : "sandbox", who = tgt ? tgt.label : "the Sandbox", bot = DATA.portal_bot, rows = T.rows;
     var src = tgt || T, rowIx = {};
     rows.forEach(function (r, i) { rowIx[r.grp] = i; });
-    var cur = (src.picked || []).slice(), curTop = !!src.top, curX = (src.exclude || []).slice();
-    var curMode = !cur.length ? "top" : curTop ? "add" : "only";
+    var B = DATA.best10 || {}, SC = B.scores || {}, minWin = +B.min_win || 0, minSig = +B.min_signals || 3;
+    var cur = (src.picked || []).slice(), curX = (src.exclude || []).slice();
+    // what is in force: the weekly top N (null = never chosen: on unless channels are picked), Extra (null = on)
+    var curTop = src.top == null ? !cur.length : !!src.top, curXon = src.extras == null ? true : !!src.extras, curMine = cur.length > 0;
     var by = src.changed_by, at = src.changed_at;
-    var D = PICK50[key] && PICK50[key].fp === T.fp ? PICK50[key] : null;   // ticks not sent yet (this browser tab)
+    var D = PICK50[key] && PICK50[key].fp === T.fp ? PICK50[key] : null;   // a choice not sent yet (this browser tab)
     var want = {}, wantX = {};
     (D ? D.ticks : cur).forEach(function (g) { want[g] = 1; });
     (D && D.excl ? D.excl : curX).forEach(function (g) { wantX[g] = 1; delete want[g]; });
-    var mode = D && D.mode ? D.mode : D ? (D.ticks.length ? (curTop ? "add" : "only") : curMode) : curMode;
-    // sessions (bits 1 Asia, 2 London, 4 London + New York, 8 New York; 15 = all) and side of each added channel
+    var top = curTop, xon = curXon, mine = curMine;
+    if (D && D.tabs) { top = !!D.tabs.top; xon = !!D.tabs.xon; mine = !!D.tabs.mine; }
+    else if (D) { mine = D.ticks.length > 0; top = D.mode === "add" || D.mode === "top" || (!D.mode && !mine); }   // a draft from the Channel finder / older page
+    // sessions (bits 1 Asia, 2 London, 4 London + New York, 8 New York; 15 = all) and side of ANY channel (27 Nov 2026)
     var curSess = {}, curSide = {}, wantS = {}, wantD = {};
     Object.keys(src.sessions || {}).forEach(function (g) { var b = 0; (src.sessions[g] || []).forEach(function (x) { var k = SESS.indexOf(x); if (k >= 0) b |= 1 << k; }); curSess[g] = b; });
     Object.keys(src.sides || {}).forEach(function (g) { var x = src.sides[g]; if (x === "buy" || x === "sell") curSide[g] = x; });
@@ -1536,47 +1546,53 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     Object.keys(dD).forEach(function (g) { wantD[g] = dD[g]; });
     var bitsOf = function (g) { return g in wantS ? wantS[g] & 15 : 15; };
     var sideOf = function (g) { return wantD[g] || ""; };
-    var B = DATA.best10 || {}, SC = B.scores || {}, minWin = +B.min_win || 0, minSig = +B.min_signals || 3;
-    // a live account's own weekly ranking when its Best of 10 runs (26 Nov 2026: it was the Sandbox's, so "In top N"
-    // could block Add for a channel the account doesn't copy); else the Sandbox's (the same rules)
+    // a live account's own weekly ranking when its Best of 10 runs (26 Nov 2026); else the Sandbox's (the same rules)
     var ranked = tgt && (tgt.ranking || []).length ? tgt.ranking.slice() : (B.ranking || []).map(function (r) { return r.grp; });
     var stand = (B.standins || []).map(function (r) { return r.grp; });
     var N = tgt ? (+tgt.topN || 10) : (ranked.length || 10), topList = ranked.slice(0, N);
-    var inTop = function (g) { return mode !== "only" && topList.indexOf(g) >= 0; };
-    var names = function () { return mode === "top" ? [] : rows.filter(function (r) { return want[r.grp] && !wantX[r.grp]; }).map(function (r) { return r.grp; }); };
+    // the strong candidates: this week's 10 best 8-week records outside the ranking (the Sandbox works them out); an
+    // account copies the first K that are not marked Never (K = its setting)
+    var cands = (B.candidates || []).map(function (r) { return r.grp; }).filter(function (g) { return topList.indexOf(g) < 0; });
+    var candRow = {}; (B.candidates || []).forEach(function (r) { candRow[r.grp] = r; });
+    var K = function () { var k = tgt && tgt.extraK ? tgt.extraK() : B.extra_k; return Math.max(0, Math.min(10, +k || 0)); };
+    var extrasNow = function () { return xon ? cands.filter(function (g) { return !wantX[g]; }).slice(0, K()) : []; };
+    var inTop = function (g) { return top && topList.indexOf(g) >= 0; };
+    var names = function () { return mine ? rows.filter(function (r) { return want[r.grp] && !wantX[r.grp]; }).map(function (r) { return r.grp; }) : []; };
     var excl = function () { return rows.filter(function (r) { return wantX[r.grp]; }).map(function (r) { return r.grp; }); };
-    var effMode = function () { return names().length ? mode : "top"; };
     var goneP = cur.filter(function (g) { return !(g in rowIx); }), goneX = curX.filter(function (g) { return !(g in rowIx); });
-    var mask = function (blank) {   // the /start payload (picks.encode): picks and exclusions (code "0") of the top 50
-      var nm = blank ? [] : names(), ex = blank ? [] : excl(), bytes = [], digits = "";
+    var limited = function (g) { return bitsOf(g) !== 15 || !!sideOf(g); };
+    var mask = function () {   // the /start payload (picks.encode with extras / limit_only): z<code><flags><fp>_<codes>_<mask>
+      var nm = names(), ex = excl(), bytes = [], digits = "";
       for (var i = 0; i < Math.ceil(rows.length / 8); i++) bytes.push(0);
       rows.forEach(function (r, i) {
-        if (ex.indexOf(r.grp) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += "0"; }
-        else if (nm.indexOf(r.grp) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += PCODES.charAt((sideOf(r.grp) === "buy" ? 16 : sideOf(r.grp) === "sell" ? 32 : 0) + bitsOf(r.grp)); }
+        var g = r.grp, code = PCODES.charAt((sideOf(g) === "buy" ? 16 : sideOf(g) === "sell" ? 32 : 0) + bitsOf(g));
+        if (ex.indexOf(g) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += "0"; }
+        else if (nm.indexOf(g) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += code; }
+        else if (limited(g)) { bytes[i >> 3] |= 1 << (i & 7); digits += "-" + code; }   // sessions / side on a channel not added
       });
       var m = btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-      var lim = /[^f]/.test(digits), code = tgt ? String(PCODE[tgt.sec]) : "0";
-      if (!blank && mode === "add" && nm.length) return (lim ? "w" : "v") + code + T.fp + "_" + (lim ? digits + "_" : "") + m;
-      if (lim) return (tgt ? "u" + code : "t") + T.fp + "_" + digits + "_" + m;
-      return (tgt ? "q" + code : "p") + T.fp + "_" + m;
+      return "z" + (tgt ? String(PCODE[tgt.sec]) : "0") + String((top ? 1 : 0) + (xon ? 2 : 0)) + T.fp + "_" + digits + "_" + m;
     };
     var limKey = function (g) { return bitsOf(g) + ":" + sideOf(g); };
     var curLim = function (g) { return (g in curSess ? curSess[g] : 15) + ":" + (curSide[g] || ""); };
     var same = function () {
-      var n = names(), c = cur.filter(function (g) { return g in rowIx; }), x = excl(), cx = curX.filter(function (g) { return g in rowIx; });
-      if (effMode() !== curMode || n.length !== c.length || x.length !== cx.length) return false;
-      return n.every(function (g) { return c.indexOf(g) >= 0 && limKey(g) === curLim(g); }) && x.every(function (g) { return cx.indexOf(g) >= 0; });
+      var n = names(), c = curMine ? cur.filter(function (g) { return g in rowIx; }) : [], x = excl(), cx = curX.filter(function (g) { return g in rowIx; });
+      if (top !== curTop || xon !== curXon || n.length !== c.length || x.length !== cx.length) return false;
+      if (!n.every(function (g) { return c.indexOf(g) >= 0; }) || !x.every(function (g) { return cx.indexOf(g) >= 0; })) return false;
+      return rows.every(function (r) { return limKey(r.grp) === curLim(r.grp); });
     };
     var limText = function (g) { var b = bitsOf(g), d = sideOf(g), x = [];
       if (b !== 15) x.push(SESS.filter(function (y, k) { return b >> k & 1; }).map(function (y) { return SESS_SHORT[y]; }).join(", ") || "no session");
       if (d) x.push(d + "s only");
       return x.join("; "); };
-    var describe = function (m, n, x) {
-      return (m === "top" ? "the weekly top " + N : m === "add" ? "the weekly top " + N + " + " + n + " channel" + (n === 1 ? "" : "s") + " of your own" : "only your " + n + " channel" + (n === 1 ? "" : "s")) +
-        (x ? ", " + x + " never copied" : "");
+    var describe = function (t, xo, k, n, x) {
+      var p = [];
+      if (t) p.push("the weekly top " + N);
+      if (xo) p.push(k + " extra");
+      if (n) p.push(n + " channel" + (n === 1 ? "" : "s") + " of your own");
+      return (p.join(" + ") || "nothing") + (x ? ", " + x + " never copied" : "");
     };
-
-    // --- stats per channel (as before): Best of 10's score, this week so far, last 28 days by session and side ---
+    // --- stats per channel: Best of 10's score, this week so far, last 28 days by session and side ---
     var pzd = {};
     (B.pause_log || []).forEach(function (e) { if (!B.week || e.week === B.week) { if (e.event === "back") delete pzd[e.grp]; else pzd[e.grp] = e; } });
     var fits = function (x) { return !!x && x.signals >= minSig && x.net > 0 && x.win >= minWin - 1e-9; };
@@ -1594,18 +1610,21 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var cd = d28[l.grp] || (d28[l.grp] = {}), y = cd[l.side] || (cd[l.side] = { r: 0, n: 0, w: 0 });
       y.r += l.r_multiple; y.n += 1; y.w += l.r_multiple > 0.05 ? 1 : 0;
     });
-    // the weekly top N first (in ranking order), then the channels that would qualify, by score
-    var shown = rows.map(function (r) { var x = SC[r.grp] || null; return { r: r, x: x, ok: fits(x), t: topList.indexOf(r.grp) }; }).sort(function (p, q) {
+    // the weekly top N first (ranking order), then the strong candidates (their order), then the rest by score
+    var shown = rows.map(function (r) { var x = SC[r.grp] || null; return { r: r, x: x, ok: fits(x), t: topList.indexOf(r.grp), c: cands.indexOf(r.grp) }; }).sort(function (p, q) {
       if ((p.t >= 0) !== (q.t >= 0)) return p.t >= 0 ? -1 : 1;
       if (p.t >= 0) return p.t - q.t;
+      if ((p.c >= 0) !== (q.c >= 0)) return p.c >= 0 ? -1 : 1;
+      if (p.c >= 0) return p.c - q.c;
       if (p.ok !== q.ok) return p.ok ? -1 : 1;
       if (!!p.x !== !!q.x) return p.x ? -1 : 1;
       if (p.x && q.x && p.x.score !== q.x.score) return q.x.score - p.x.score;
       return p.r.rank - q.r.rank;
     });
     var noteOf = function (g, x, ok) {
-      var out = [], k = ranked.indexOf(g), st = statusOf(g);
+      var out = [], k = ranked.indexOf(g), st = statusOf(g), c = candRow[g];
       if (k >= 0) out.push("#" + (k + 1) + " in this week’s ranking" + ((B.replaced || []).indexOf(g) >= 0 ? ", out for now" : ""));
+      if (c && cands.indexOf(g) >= 0) out.push("Strong candidate #" + (cands.indexOf(g) + 1) + ": " + signed(c.net, 1) + "R from " + c.signals + " signals over the last " + (B.extra_weeks || 8) + " weeks");
       if (stand.indexOf(g) >= 0) out.push("Stand-in on the Sandbox this week");
       if (pzd[g]) out.push("Paused by the mid-week check since " + when(pzd[g].at) + " (" + Math.round((pzd[g].win || 0) * 100) + "% of " + pzd[g].n + " then" +
         (cw[g] ? "; now " + pct(cw[g].w, cw[g].n) + " of " + cw[g].n : "") + "; copied again at " + Math.round((pzd[g].resume || 0.65) * 100) + "%)");
@@ -1617,21 +1636,28 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     };
     var rc = function (v) { return v == null ? "–" : el("span", { cls: v > 0 ? "win" : v < 0 ? "loss" : "", text: signed(v, 1) + "R" }); };
 
-    // --- 1. what Best of 10 copies ---
-    var MODES = [["top", "Weekly top " + N, "Copies this week’s " + N + " best channels, re-ranked every Monday. A muted, blacklisted, paused or excluded one is replaced by the next best (stand-in)."],
-      ["add", "Top " + N + " + my channels", "This week’s top " + N + " as above, PLUS the channels you add below, each with its own sessions and direction. Your channels stay until you remove them, whatever Monday’s ranking."],
-      ["only", "Only my channels", "Only the channels you add below; the weekly ranking is not used. With the safety rules on, a paused or muted pick gets a stand-in from this week’s top 10."]];
-    var modeBtns = MODES.map(function (m) {
-      return el("button", { type: "button", cls: "segb", role: "radio", on: { click: function () { mode = m[0]; update(); } } }, [m[1]]);
+    // --- 1. what Best of 10 copies: one tab per mix (the extra count shown in the labels) ---
+    var TABS = [["Top " + N, true, false, false], ["Top " + N + " + Extra", true, true, false], ["Top " + N + " + Extra + My channels", true, true, true],
+      ["Top " + N + " + My channels", true, false, true], ["Extra + My channels", false, true, true], ["My channels only", false, false, true]];
+    var HELP = function () {
+      var k = K(), p = [];
+      if (top) p.push("this week’s " + N + " best channels, re-ranked every Monday (a muted, blacklisted, paused or Never one is replaced by the next best)");
+      if (xon) p.push(k ? "the " + k + " strong candidates (“Extra”): the best " + (B.extra_weeks || 8) + "-week records outside the top " + N + " (positive, 8+ signals), worked out every week" :
+        "the strong candidates (“Extra”), but this account’s number is 0: set it under Strategies, “Strong candidates (extra)”" + (tgt ? "" : " (the Sandbox: best3.ini extra_channels)"));
+      if (mine) p.push("the channels you add below, kept whatever the ranking");
+      return "Copies " + (p.join("; plus ") || "nothing") + ". Sessions and buys/sells can be set for any copied channel in the list.";
+    };
+    var tabBtns = TABS.map(function (m) {
+      return el("button", { type: "button", cls: "segb", role: "radio", on: { click: function () { top = m[1]; xon = m[2]; mine = m[3]; update(); } } }, [m[0]]);
     });
-    var modeHelp = el("p", { cls: "note", style: "margin:-8px 0 14px;max-width:80ch" });
+    var modeHelp = el("p", { cls: "note", style: "margin:-8px 0 14px;max-width:90ch" });
     // --- 2. the live summary ---
     var sumHead = el("div", { style: "font-weight:600;margin-bottom:6px" }), sumChips = el("div"), sumNever = el("div", { style: "margin-top:6px" });
     var summary = el("div", { cls: "panel", style: "margin-bottom:14px" }, [sumHead, sumChips, sumNever]);
-    // --- 3. the list: search, filters, more columns ---
+    // --- 3. the list: search, filter tabs, more columns ---
     var q = "", filt = "all", more = false;
     var search = el("input", { type: "search", placeholder: "Search channels…", "aria-label": "Search channels", on: { input: function (e) { q = e.target.value.toLowerCase(); update(); } } });
-    var FILTERS = [["all", "All 50"], ["copied", "Copied"], ["top", "Top " + N], ["qual", "Would qualify"], ["never", "Never"]];
+    var FILTERS = [["all", "All 50"], ["copied", "Copied"], ["top", "Top " + N], ["extra", "Extra"], ["mine", "My channels"], ["qual", "Would qualify"], ["never", "Never"]];
     var filtBtns = FILTERS.map(function (f) { return el("button", { type: "button", cls: "segb small", on: { click: function () { filt = f[0]; update(); } } }, [f[1]]); });
     var moreBox = el("input", { type: "checkbox", on: { change: function (e) { more = e.target.checked; update(); } } });
     var tools = el("div", { cls: "tool" }, [search, el("div", { cls: "seg", style: "margin:0" }, filtBtns), el("label", { cls: "note" }, [moreBox, " More columns"])]);
@@ -1639,39 +1665,37 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var tbody = el("tbody", null, shown.map(function (it) {
       var r = it.r, x = it.x, g = r.grp, c = cw[g];
       var act = el("button", { type: "button", cls: "sesb act", on: { click: function () {
-        if (inTop(g) && !want[g]) {   // a top-N channel marked Never: "Allow" puts it back in the top N (26 Nov 2026: did nothing)
-          if (wantX[g]) { delete wantX[g]; update(); }
-          return;
-        }
-        if (mode === "top") { mode = "add"; want[g] = 1; }
-        else if (want[g]) delete want[g]; else want[g] = 1;
-        delete wantX[g]; update(); } } });
-      var nev = el("button", { type: "button", cls: "sesb never", title: "Never copy " + g + " on " + who + ", even when it ranks in the top " + N + " (the next best takes its place).",
+        if (wantX[g]) { delete wantX[g]; update(); return; }   // Allow: Never off (a top N / Extra channel is copied again)
+        if ((inTop(g) || extrasNow().indexOf(g) >= 0) && !want[g]) return;   // copied already as top N / Extra
+        if (want[g] && mine) delete want[g]; else { want[g] = 1; mine = true; }
+        update(); } } });
+      var nev = el("button", { type: "button", cls: "sesb never", title: "Never copy " + g + " on " + who + ", even when it ranks in the top " + N + " or is a strong candidate (the next best takes its place).",
         on: { click: function () { if (wantX[g]) delete wantX[g]; else { wantX[g] = 1; delete want[g]; } update(); } } }, ["Never"]);
       var ses = SESS.map(function (sn, k) {
         var d = (s28[g] || {})[sn];
         return el("button", { type: "button", cls: "sesb", title: sn + " (London time" + SESS_NBO[sn] + "): " + (d ? signed(d.r, 1) + "R from " + d.n + " position" + (d.n === 1 ? "" : "s") + ", " + pct(d.w, d.n) + " won, last 28 days" : "no closed positions in the last 28 days") +
-          ". For a channel you added: click to copy it in this session or not.",
+          ". Click to copy this channel in this session or not (any copied channel: top " + N + ", Extra or yours).",
           on: { click: function () { var b = bitsOf(g) ^ (1 << k); if (b === 15) delete wantS[g]; else wantS[g] = b; update(); } } },
           [SESS_SHORT[sn] + " ", d ? el("span", { cls: d.r > 0 ? "win" : d.r < 0 ? "loss" : "", text: signed(d.r, 0) }) : "–"]);
       });
       var dd = d28[g] || {}, sideTip = function (k, lab) { var d = dd[k]; return lab + ": " + (d ? signed(d.r, 1) + "R from " + d.n + " position" + (d.n === 1 ? "" : "s") + ", " + pct(d.w, d.n) + " won" : "none closed"); };
       var sideLab = el("span", { text: "Buys + sells" });
       var side = el("button", { type: "button", cls: "sesb", title: "Last 28 days, every TP. " + sideTip("buy", "Buys") + "; " + sideTip("sell", "Sells") +
-          ". For a channel you added: click to copy its buys and sells, buys only, or sells only. Mostly follows gold’s direction that month: use with care.",
+          ". Click to copy its buys and sells, buys only, or sells only (any copied channel). Mostly follows gold’s direction that month: use with care.",
           on: { click: function () { var d = sideOf(g), nx = d === "" ? "buy" : d === "buy" ? "sell" : ""; if (nx) wantD[g] = nx; else delete wantD[g]; update(); } } },
         [sideLab, " ", dd.buy ? el("span", { cls: dd.buy.r > 0 ? "win" : dd.buy.r < 0 ? "loss" : "", text: "B" + signed(dd.buy.r, 0) }) : "B –", " ",
          dd.sell ? el("span", { cls: dd.sell.r > 0 ? "win" : dd.sell.r < 0 ? "loss" : "", text: "S" + signed(dd.sell.r, 0) }) : "S –"]);
       var st = statusOf(g), note = noteOf(g, x, it.ok);
+      var xb = el("span", { cls: "badge extra", style: "display:none" });
       var nameCell = el("td", { cls: "wrap" }, [el("strong", { text: g }), st ? el("span", { cls: st.cls, title: st.note, text: st.badge }) : null,
-        it.t >= 0 ? el("span", { cls: "badge new", title: "#" + (it.t + 1) + " in this week’s ranking", text: "Top " + N + " #" + (it.t + 1) }) : null]);
+        it.t >= 0 ? el("span", { cls: "badge new", title: "#" + (it.t + 1) + " in this week’s ranking", text: "Top " + N + " #" + (it.t + 1) }) : null, xb]);
       nameCell.title = note;
       var td = function (v, c2) { return el("td", c2 ? { cls: c2 } : null, [v == null ? "–" : typeof v === "object" ? v : String(v)]); };
       var tr = el("tr", null, [el("td", { cls: "acts" }, [act, nev]), nameCell, el("td", null, ses), el("td", null, [side]),
         td(x ? signed(x.score, 1) : "–", "num"), td(x ? rc(x.net) : "–", "num"), td(c ? rc(c.r) : "–", "num"), td(rc(r.net), "num"),
         td(x ? pct(Math.round(x.win * 100), 100) : "–", "num more"), td(x ? x.signals : "–", "num more"), td(c ? pct(c.w, c.n) : "–", "num more"),
         td(c ? Object.keys(c.ids).length : 0, "num more"), td(r.votes ? "Yes" : "No", "more"), el("td", { cls: "wrap note more", text: note })]);
-      boxes.push({ g: g, tr: tr, act: act, nev: nev, ses: ses, side: side, sideLab: sideLab, ok: it.ok });
+      boxes.push({ g: g, tr: tr, act: act, nev: nev, ses: ses, side: side, sideLab: sideLab, ok: it.ok, xb: xb });
       return tr;
     }));
     var head = ["Copy", "Channel", "Sessions (28-day R)", "Side (28-day R)", "Score", "Last wk R", "This wk R", "28-day R", "Last wk win", "Last wk sig.", "This wk win", "This wk sig.", "Votes", "Note"];
@@ -1686,32 +1710,38 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       want = {}; cur.forEach(function (g) { want[g] = 1; }); wantX = {}; curX.forEach(function (g) { wantX[g] = 1; });
       wantS = {}; Object.keys(curSess).forEach(function (g) { wantS[g] = curSess[g]; });
       wantD = {}; Object.keys(curSide).forEach(function (g) { wantD[g] = curSide[g]; });
-      mode = curMode; update();
+      top = curTop; xon = curXon; mine = curMine; update();
     };
     send.addEventListener("click", doSend);
     undo.addEventListener("click", doUndo);
     var ownBar = tgt && tgt.onDraft ? null : el("div", { cls: "savebar", role: "region", "aria-label": "Unsent channel changes" }, [el("div", { cls: "row" }, [msg, undo, send])]);
 
     function update() {
-      var n = names(), x = excl(), noSess = n.filter(function (g) { return !bitsOf(g); }), link = mask(), dirty = !same() || goneP.length > 0 || goneX.length > 0;
-      savePick50(key, T.fp, same() ? null : want, wantS, wantD, { mode: mode, excl: x });
-      modeBtns.forEach(function (b, i) { var on = MODES[i][0] === mode; b.className = "segb" + (on ? " on" : ""); b.setAttribute("aria-checked", on ? "true" : "false"); });
-      modeHelp.textContent = MODES.filter(function (m) { return m[0] === mode; })[0][2];
+      var n = names(), x = excl(), ex = extrasNow(), k = K(), link = mask(), dirty = !same() || goneP.length > 0 || goneX.length > 0;
+      var noSess = rows.filter(function (r) { return !bitsOf(r.grp) && !wantX[r.grp]; }).map(function (r) { return r.grp; });
+      savePick50(key, T.fp, same() ? null : want, wantS, wantD, { tabs: { top: top, xon: xon, mine: mine }, excl: x });
+      tabBtns.forEach(function (b, i) { var on = TABS[i][1] === top && TABS[i][2] === xon && TABS[i][3] === mine;
+        b.className = "segb" + (on ? " on" : ""); b.setAttribute("aria-checked", on ? "true" : "false");
+        b.textContent = TABS[i][0].replace("Extra", "Extra (" + k + ")"); });
+      modeHelp.textContent = HELP();
       // summary
-      var tops = mode === "only" ? [] : topList.filter(function (g) { return !wantX[g]; });
-      var outTop = mode === "only" ? [] : topList.filter(function (g) { return wantX[g]; });
-      var own = n.filter(function (g) { return tops.indexOf(g) < 0; });
-      sumHead.textContent = "Will copy on " + who + ": " + (tops.length + own.length) + " channel" + (tops.length + own.length === 1 ? "" : "s") +
-        (outTop.length ? " (" + outTop.length + " of the top " + N + " excluded: the next best stand" + (outTop.length === 1 ? "s" : "") + " in)" : "") +
-        (mode === "only" && !n.length ? ": add at least one channel below, or choose “Weekly top " + N + "”" : "");
+      var tops = top ? topList.filter(function (g) { return !wantX[g]; }) : [], outTop = top ? topList.filter(function (g) { return wantX[g]; }) : [];
+      var extra = ex.filter(function (g) { return tops.indexOf(g) < 0; });
+      var own = n.filter(function (g) { return tops.indexOf(g) < 0 && extra.indexOf(g) < 0; });
+      var total = tops.length + extra.length + own.length;
+      sumHead.textContent = "Will copy on " + who + ": " + total + " channel" + (total === 1 ? "" : "s") +
+        (outTop.length ? " (" + outTop.length + " of the top " + N + " marked Never: the next best stand" + (outTop.length === 1 ? "s" : "") + " in)" : "") +
+        (!top && !xon && !n.length ? ": add at least one channel below, or choose a tab with the top " + N + " or Extra" : "");
       sumChips.textContent = "";
-      tops.forEach(function (g) { var l = n.indexOf(g) >= 0 ? limText(g) : "";   // a top channel you also added keeps your limits
-        sumChips.appendChild(el("span", { cls: "chip" + (n.indexOf(g) >= 0 ? " add" : ""), title: "In this week’s top " + N + (n.indexOf(g) >= 0 ? "; also added by you, so it stays copied after Monday’s re-rank" : "") },
-          ["#" + (topList.indexOf(g) + 1) + " " + g + (l ? " (" + l + ")" : "")])); });
-      own.forEach(function (g) { var l = limText(g);
-        sumChips.appendChild(el("span", { cls: "chip add" }, ["+ " + g + (l ? " (" + l + ")" : ""),
-          el("button", { type: "button", "aria-label": "Remove " + g, title: "Remove", on: { click: function () { delete want[g]; update(); } } }, ["✕"])])); });
-      if (!tops.length && !own.length) sumChips.appendChild(el("span", { cls: "note", text: "Nothing yet." }));
+      var chip = function (g, label, cls2, rm) { var l = limText(g);
+        sumChips.appendChild(el("span", { cls: "chip" + (cls2 ? " " + cls2 : "") }, [label + (l ? " (" + l + ")" : ""),
+          rm ? el("button", { type: "button", "aria-label": "Remove " + g, title: "Remove", on: { click: rm } }, ["✕"]) : null])); };
+      tops.forEach(function (g) { chip(g, "#" + (topList.indexOf(g) + 1) + " " + g, n.indexOf(g) >= 0 ? "add" : ""); });
+      extra.forEach(function (g) { chip(g, "Extra " + g, "xtra", function () { wantX[g] = 1; update(); }); });
+      own.forEach(function (g) { chip(g, "+ " + g, "add", function () { delete want[g]; update(); }); });
+      if (xon && !k) sumChips.appendChild(el("span", { cls: "note", text: " Extra is ticked but this account’s number is 0 (Strategies: Strong candidates)." }));
+      else if (xon && !cands.length) sumChips.appendChild(el("span", { cls: "note", text: " The Sandbox hasn’t published this week’s strong candidates yet (after its next restart): the account still copies its own " + k + "." }));
+      if (!total && !(xon && k)) sumChips.appendChild(el("span", { cls: "note", text: "Nothing yet." }));
       sumNever.textContent = "";
       if (x.length) {
         sumNever.appendChild(el("span", { cls: "note", text: "Never copied: " }));
@@ -1721,21 +1751,27 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       // rows
       var shownN = 0;
       boxes.forEach(function (b) {
-        var g = b.g, isX = !!wantX[g], top = inTop(g), pick = mode !== "top" && !!want[g] && !isX, copied = !isX && (top || pick);
-        b.act.disabled = top && !want[g] && !isX;
-        b.act.textContent = isX ? (top && !want[g] ? "Allow" : mode === "only" ? "Copy" : "Add") : top && !want[g] ? "In top " + N : pick ? "✓ " + (mode === "only" ? "Copied" : "Added") : "+ " + (mode === "only" ? "Copy" : "Add");
+        var g = b.g, isX = !!wantX[g], isTop = inTop(g), isEx = ex.indexOf(g) >= 0, pick = mine && !!want[g] && !isX, copied = !isX && (isTop || isEx || pick);
+        var ci = cands.indexOf(g);
+        b.xb.style.display = ci >= 0 ? "" : "none";
+        b.xb.textContent = "Extra #" + (ci + 1);
+        b.xb.className = "badge extra" + (isEx ? "" : " off");
+        b.xb.title = ci >= 0 ? "Strong candidate #" + (ci + 1) + (isEx ? ": copied as Extra" : xon ? ": beyond this account’s " + k : ": Extra not ticked") : "";
+        b.act.disabled = !isX && (isTop || isEx) && !want[g];
+        b.act.textContent = isX ? "Allow" : isTop && !want[g] ? "In top " + N : isEx && !want[g] ? "Extra" : pick ? "✓ Added" : "+ Add";
         b.act.className = "sesb act" + (copied ? " on" : "");
-        b.act.title = isX && top && !want[g] ? "Allow " + g + " again: it is back in this week’s top " + N + "." :
-          top && !want[g] ? g + " is copied as part of this week’s top " + N + ". Use Never to leave it out." :
-          pick ? "Click to remove " + g : mode === "top" ? "Add " + g + " on top of the weekly top " + N + " (switches to “Top " + N + " + my channels”)" : "Copy " + g + " on " + who;
+        b.act.title = isX ? "Allow " + g + " again" : isTop && !want[g] ? g + " is copied as part of this week’s top " + N + ". Use Never to leave it out." :
+          isEx && !want[g] ? g + " is copied as a strong candidate. Use Never to leave it out (the next candidate takes its place)." :
+          pick ? "Click to remove " + g : "Add " + g + " as one of your channels";
         b.nev.className = "sesb never" + (isX ? " on" : "");
         b.nev.setAttribute("aria-pressed", isX ? "true" : "false");
-        b.ses.forEach(function (s, k) { var on = copied && (!pick || (bitsOf(g) >> k & 1)); s.disabled = !pick; s.className = "sesb" + (on ? " on" : ""); s.setAttribute("aria-pressed", on ? "true" : "false"); });
+        b.ses.forEach(function (s, k2) { var on = copied && (bitsOf(g) >> k2 & 1); s.disabled = !copied; s.className = "sesb" + (on ? " on" : ""); s.setAttribute("aria-pressed", on ? "true" : "false"); });
         var d = sideOf(g);
-        b.side.disabled = !pick; b.side.className = "sesb" + (copied ? " on" : "");
-        b.sideLab.textContent = pick && d === "buy" ? "Buys only" : pick && d === "sell" ? "Sells only" : "Buys + sells";
+        b.side.disabled = !copied; b.side.className = "sesb" + (copied ? " on" : "");
+        b.sideLab.textContent = d === "buy" ? "Buys only" : d === "sell" ? "Sells only" : "Buys + sells";
         b.tr.className = copied ? "in" : isX ? "never" : "";
-        var vis = (!q || g.toLowerCase().indexOf(q) >= 0) && (filt === "all" || filt === "copied" && copied || filt === "top" && topList.indexOf(g) >= 0 || filt === "qual" && b.ok || filt === "never" && isX);
+        var vis = (!q || g.toLowerCase().indexOf(q) >= 0) && (filt === "all" || filt === "copied" && copied || filt === "top" && topList.indexOf(g) >= 0 ||
+          filt === "extra" && ci >= 0 || filt === "mine" && pick || filt === "qual" && b.ok || filt === "never" && isX);
         b.tr.style.display = vis ? "" : "none";
         if (vis) shownN++;
       });
@@ -1743,29 +1779,31 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       tbl.className = "compact b10t" + (more ? "" : " lite");
       noRows.style.display = shownN ? "none" : "";
       // status
-      var ok = !!bot && !noSess.length && link.length <= 64 && !(mode === "only" && !n.length);
+      var nothing = !top && !(xon && k) && !n.length;
+      var ok = !!bot && !noSess.length && link.length <= 64 && !nothing;
       var text = !bot ? "The tracker’s bot isn’t running, so channel changes can’t be sent yet." :
-        !dirty ? "Channels: no changes. " + who.charAt(0).toUpperCase() + who.slice(1) + " copies " + describe(curMode, cur.length, curX.length) + "." :
-        noSess.length ? "Channels: tick at least one session for " + noSess.join(", ") + " (or remove it)." :
-        mode === "only" && !n.length ? "Channels: “Only my channels” needs at least one channel." :
-        link.length > 64 ? "Channels: too many limits for one Telegram link: give some added channels every session." :
-        "Channels, not sent yet: " + describe(effMode(), effMode() === "add" ? own.length : n.length, x.length) + ".";
-      if (tgt && tgt.onDraft) tgt.onDraft({ dirty: dirty, ok: ok, text: text, send: doSend, undo: doUndo });
+        !dirty ? "Channels: no changes. " + who.charAt(0).toUpperCase() + who.slice(1) + " copies " + describe(curTop, curXon, k, curMine ? cur.length : 0, curX.length) + "." :
+        noSess.length ? "Channels: tick at least one session for " + noSess.join(", ") + "." :
+        nothing ? "Channels: nothing would be copied. Choose a tab with the top " + N + " or Extra, or add channels." :
+        link.length > 64 ? "Channels: too many limits for one Telegram link: give some channels every session." :
+        "Channels, not sent yet: " + describe(top, xon, k, own.length, x.length) + ".";
+      if (tgt && tgt.onDraft) tgt.onDraft({ dirty: dirty, ok: ok, text: text, send: doSend, undo: doUndo, refresh: update });
       else { msg.textContent = text; send.disabled = !dirty || !ok; undo.disabled = !dirty; ownBar.className = "savebar" + (dirty ? " dirty" : ""); }
     }
-    var now = cur.length || curX.length ? "Now: " + describe(curMode, cur.length, curX.length) + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") + "." : "Now: the weekly top " + N + " (nothing added or excluded).";
+    var now = "Now: " + describe(curTop, curXon, K(), curMine ? cur.length : 0, curX.length) + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") + ".";
     var help = el("details", { cls: "note", style: "margin-top:10px" }, [el("summary", { text: "How this list works" }),
-      el("p", { style: "max-width:90ch", text: "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "). This week’s top " + N + " come first, then the channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") by Best of 10’s score (net R × win rate on every TP, " + (B.scores_basis || "last week") + "). " +
-        "“+ Add” copies a channel on " + who + " (in “Weekly top " + N + "” it switches to “Top " + N + " + my channels”); “Never” leaves a channel out even when it ranks, and the next best takes its place. " +
-        "Sessions and Side apply to the channels you add: lit = copied. Sessions are by when the channel posts, London time: Asia 22:00–07:00 (01:00–10:00 Nairobi), London 07:00–12:00 (10:00–15:00), London + New York 12:00–17:00 (15:00–20:00), New York 17:00–22:00 (20:00–01:00); the numbers are the last 28 days’ R in each. " +
-        "Changes are sent through the tracker’s bot: tap Start, then Apply. " + (tgt ? "Only " + tgt.label + "’s owner or the admin can confirm." : "Only the admin or a linked account owner can confirm; live accounts pick their own on the Settings tab.") })]);
+      el("p", { style: "max-width:90ch", text: "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "). This week’s top " + N + " come first, then the strong candidates (Extra #1, #2 …), then the channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") by Best of 10’s score (net R × win rate on every TP, " + (B.scores_basis || "last week") + "). " +
+        "“+ Add” makes a channel one of yours (the tab switches to one with “My channels”); “Never” leaves a channel out even when it ranks or is a strong candidate, and the next best takes its place. " +
+        "Sessions and Side work on every copied channel (top " + N + ", Extra or yours): lit = copied; a limit stays with the channel by name, so it applies whenever the channel is copied, also after Monday’s re-rank. Sessions are by when the channel posts, London time: Asia 22:00–07:00 (01:00–10:00 Nairobi), London 07:00–12:00 (10:00–15:00), London + New York 12:00–17:00 (15:00–20:00), New York 17:00–22:00 (20:00–01:00); the numbers are the last 28 days’ R in each. " +
+        "How many Extra: " + (tgt ? tgt.label + "’s setting under Strategies (“Strong candidates (extra)”), sent with “Send settings”." : "best3.ini [best10] extra_channels.") + " Changes are sent through the tracker’s bot: tap Start, then Apply. " +
+        (tgt ? "Only " + tgt.label + "’s owner or the admin can confirm." : "Only the admin or a linked account owner can confirm; live accounts choose their own on the Settings tab.") })]);
     update();
     var body = el("div", null, [
-      el("div", { cls: "seg", role: "radiogroup", "aria-label": "What Best of 10 copies" }, modeBtns), modeHelp, summary,
+      el("div", { cls: "seg", role: "radiogroup", "aria-label": "What Best of 10 copies" }, tabBtns), modeHelp, summary,
       tgt && !tgt.on ? el("p", { cls: "note", style: "color:var(--loss);margin:-6px 0 12px", text: "Best of 10 is off on " + tgt.label + ": these channels trade once it is switched on under Strategies." }) : null,
       goneP.length || goneX.length ? el("p", { cls: "note", text: "No longer in this week’s top 50 (kept until you send a new choice, then dropped): " + goneP.concat(goneX.map(function (g) { return g + " (never)"; })).join(", ") + "." }) : null,
       tools, el("div", { cls: "scroll" }, [tbl]), noRows, help, ownBar]);
-    return block(tgt ? "Best of 10 channels: " + tgt.label : "Best of 10 channels on the Sandbox", "Choose what Best of 10 copies, add your own channels (with sessions and direction) and leave out any you never want. " + now, body);
+    return block(tgt ? "Best of 10 channels: " + tgt.label : "Best of 10 channels on the Sandbox", "Choose what Best of 10 copies with the tabs, set sessions and buys/sells for any copied channel, add your own and leave out any you never want. " + now, body);
   }
   function b3BackfillNote(bandit) {   // why "Include backfill" doesn't change this tab (the bandit page has its own wording since 23 Nov 2026)
     if (bandit) return el("p", { cls: "note", style: "margin-bottom:12px;max-width:80ch", text:
@@ -3164,6 +3202,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     // 24 Nov 2026 (Arnold: "account wide regardless of strategy ... a resume button for anyone who wants to trade. Default is pause")
     ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 13:00 – 18:00 Nairobi (05:00 – 10:00 New York: London afternoon, US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."],
     // 26 Nov 2026 (owner: "Yes, add it"): Best of 10's limit per channel; code "Mc" (every capital letter is taken)
+    ["best10_extra", "Ex", "int", "Strong candidates (extra)", "Best of 10: how many strong candidates (the best 8-week records outside this week’s top 10, positive, 8+ signals) this account copies when “Extra” is ticked in its channel choice. 0 = none, 0 – 10."],
     ["best10_max_per_channel", "Mc", "int", "Max open per channel", "Best of 10: at most this many positions and waiting orders from any one channel at once; a new signal takes only the room left, nearest TPs first. 0 = no limit. 0 – 20. The account’s Max open trades still applies on top."]];
   // the Settings tab's layout (23 Nov 2026, Arnold's sheet: "The settings tab..should appear in a similar format.
   // Reorganise/group appropriately"; chose "Layout now, new rules next"): General = the whole account, Live 1 / 2 / 3
@@ -3187,12 +3226,12 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       "lots", "ladder_lots", "best10_lots"],
     ["Channels to copy", "Consensus: this week’s voting channels; 2 or more must agree. Best of 10: how many of last week’s best channels it copies, 1 – 10 (a change re-ranks the week at once).",
       function () { return "Voting channels (2+ agree)"; }, function () { return "Follows the consensus"; }, "best10_top"],
+    ["Strong candidates (extra)", "Best of 10: how many strong candidates the account copies when “Extra” is ticked in Best of 10 channels below (the best 8-week records outside this week’s top 10: positive, 8+ signals, worked out every week; a channel marked Never is skipped and the next one taken). 0 = none, 0 – 10.",
+      function () { return "–"; }, function () { return "–"; }, "best10_extra"],
     ["Max open per channel", "Best of 10: at most this many positions and waiting orders from one channel at once (a signal with more TPs than the room left copies the nearest TPs). 0 = no limit, 0 – 20. Max open trades (Account, above) still caps the whole account. Consensus and ladder: one trade per consensus.",
       function () { return "One per consensus"; }, function () { return "One per consensus"; }, "best10_max_per_channel"],
-    ["Manually selected channels", "Channels picked by hand for Best of 10 from this week’s top 50 (the list below the table), copied whatever their ranking; the mid-week pause and the channel rules apply unless the next row is off. None = last week’s ranking.",
-      function () { return "–"; }, function () { return "–"; }, function (a) {
-        var p = ((DATA.top50 || {}).accounts || {})[a.section] || {}, n = (p.picked || []).length;
-        return n ? n + " picked" + (p.changed_by ? " by " + p.changed_by : "") + ": " + pickedText(a.section, p.picked) : "None: last week’s ranking (pick below)"; }],
+    ["What Best of 10 copies", "Chosen with the tabs in Best of 10 channels below: the weekly top 10, the strong candidates (Extra, how many: the row above) and channels of your own, in any mix; sessions and buys/sells can be set for any copied channel there. The mid-week pause and the channel rules apply to your own channels unless the next row is off.",
+      function () { return "–"; }, function () { return "–"; }, function (a) { return b10ChoiceText(a); }],
     ["Safety rules on picked channels", "Best of 10 picks: a paused pick (under 50% wins this week, back at 65%) or one muted / blacklisted for deleting signals is not copied; the best free channel of this week’s top 10 stands in until it is back. Off = picks copied whatever.",
       function () { return "Channel rules apply (voters)"; }, function () { return "Follows the consensus"; }, "best10_rules"],
     ["News filter", "No new order this many minutes either side of high-impact US news. 0 = off. Ladder and Best of 10 follow the consensus’s until set here.", "news_min", "ladder_news", "best10_news"],
@@ -3209,12 +3248,24 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["Pause after an opposite consensus", "No consensus or ladder order this many minutes after a consensus the other way. 0 = off. Best of 10 doesn’t use it.",
       "cooldown_min", null, function () { return "No (not used)"; }, 2]];
   var PCODE = { live: "1", live2: "2", live3: "3" };
+  // what Best of 10 copies on a live account, in words (27 Nov 2026): "Top 10 + 5 extra + 2 own · 1 never"
+  function b10ChoiceText(a, short) {
+    var p = ((DATA.top50 || {}).accounts || {})[a.section] || {}, v = (a.portal || {}).values || {};
+    var n = (p.picked || []).length, x = (p.exclude || []).length, N = +v.best10_top || 10, k = +v.best10_extra || 0;
+    var top = p.top == null ? !n : !!p.top, xon = p.extras == null ? true : !!p.extras, parts = [];
+    if (top) parts.push("Top " + N);
+    if (xon && k) parts.push(k + " extra");
+    if (n) parts.push(n + " own");
+    var t = (parts.join(" + ") || "Nothing") + (x ? " · " + x + " never" : "");
+    return short ? t : t + (n ? ": " + pickedText(a.section, p.picked) : "") + (p.changed_by ? " (by " + p.changed_by + ")" : "");
+  }
   function portalShow(key, x) {   // a setting's value in words (the defaults note)
     if (x && x.text) return x.text;
     if (x === true || x === false) return key === "trading" ? (x ? "on" : "paused") : (x ? "on" : "off");
     if (key === "lots" || key === "best10_lots" || key === "ladder_lots") return x === "auto" ? "auto" : x === "rule" ? "config.ini’s lot rule" : String(+x);
     if (key === "stop_usd" || key === "ladder_stop") return "$" + (+x);
     if (key === "best10_max_per_channel" && !+x) return "no limit";
+    if (key === "best10_extra" && !+x) return "none";
     var mins = ["news_min", "ladder_news", "best10_news", "cooldown_min", "max_delay"];
     if ((key === "week_limit" || key === "max_risk" || mins.indexOf(key) >= 0 && key !== "max_delay") && !+x) return "off";
     if (key === "day_limit" || key === "week_limit" || key === "max_risk") return (+x) + "%";
@@ -3261,7 +3312,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     })));
     // 2. at a glance
     var ap = ((DATA.top50 || {}).accounts || {})[sec] || {}, npk = (ap.picked || []).length, nx = (ap.exclude || []).length, topN = +cur.best10_top || 10;
-    var b10Now = cur.best10 === false ? "Off" : "best10" in cur ? (npk ? (ap.top ? "Top " + topN + " + " + npk : npk + " own") : "Top " + topN) + (nx ? " · " + nx + " never" : "") : "–";
+    var b10Now = cur.best10 === false ? "Off" : "best10" in cur ? b10ChoiceText(a, true) : "–";
     var glance = [["Trading", cur.trading === false ? "Paused" : "On"]];
     if ("max_open" in cur) glance.push(["Max open", cur.max_open]);
     if ("max_risk" in cur) glance.push(["Risk per order", cur.max_risk + "%"]);
@@ -3345,12 +3396,14 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         ["Setting", "Consensus", "Ladder", "Best of 10", "What it does"].map(function (h) { return el("th", { scope: "col", text: h }); }))]), sb])]));
     b2.id = "set-strat"; v.appendChild(b2);
     // 5. Best of 10 channels: what it copies, your own channels, the ones never copied
-    var pk = { dirty: false, ok: false, text: "", send: null, undo: null }, settingsReady = false, pickBlock = null;
+    var pk = { dirty: false, ok: false, text: "", send: null, undo: null }, settingsReady = false, pickBlock = null, lastK = null;
     if (DATA.top50 && (DATA.top50.rows || []).length) {
       pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], sessions: ap.sessions || {}, sides: ap.sides || {},
-        top: !!ap.top, exclude: ap.exclude || [], changed_by: ap.changed_by, changed_at: ap.changed_at, on: cur.best10 !== false, topN: topN,
+        top: ap.top == null ? null : !!ap.top, extras: ap.extras == null ? null : !!ap.extras, exclude: ap.exclude || [],
+        extraK: function () { return "best10_extra" in want ? +want.best10_extra : 0; }, changed_by: ap.changed_by, changed_at: ap.changed_at, on: cur.best10 !== false, topN: topN,
         ranking: (a.best10 && !a.best10.off && a.best10.ranking) || [],   // the account's own weekly top N (26 Nov 2026)
         onDraft: function (st) { pk = st; if (settingsReady) update(); } });
+      lastK = +want.best10_extra;
       pickBlock.id = "set-b10"; v.appendChild(pickBlock);
     }
     var changedKeys = function () {
@@ -3390,6 +3443,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (!(+want.week_limit >= 0 && +want.week_limit <= 80)) bad.push("Weekly loss limit must be 0 – 80.");
       if (!(+want.max_open >= 1 && +want.max_open <= 20)) bad.push("Max open trades must be 1 – 20.");
       if (ch.indexOf("best10_top") >= 0 && !(+want.best10_top >= 1 && +want.best10_top <= 10)) bad.push("Channels to copy must be 1 – 10.");
+      if (ch.indexOf("best10_extra") >= 0 && !(+want.best10_extra >= 0 && +want.best10_extra <= 10)) bad.push("Strong candidates must be 0 – 10.");
+      if (pk.refresh && +want.best10_extra !== lastK) { lastK = +want.best10_extra; pk.refresh(); return; }   // the Extra tabs follow the number
       if (ch.indexOf("ladder_lots") >= 0 && want.ladder_lots !== "auto" && !(+want.ladder_lots >= 0.01 && +want.ladder_lots <= maxL)) bad.push("Ladder lots must be 0.01 – " + maxL + ".");
       if (ch.indexOf("ladder_news") >= 0 && !(+want.ladder_news >= 0 && +want.ladder_news <= 120)) bad.push("Ladder news filter must be 0 – 120 min.");
       if (ch.indexOf("best10_news") >= 0 && !(+want.best10_news >= 0 && +want.best10_news <= 120)) bad.push("Best of 10 news filter must be 0 – 120 min.");
