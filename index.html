@@ -1568,7 +1568,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         var g = r.grp, code = PCODES.charAt((sideOf(g) === "buy" ? 16 : sideOf(g) === "sell" ? 32 : 0) + bitsOf(g));
         if (ex.indexOf(g) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += "0"; }
         else if (nm.indexOf(g) >= 0) { bytes[i >> 3] |= 1 << (i & 7); digits += code; }
-        else if (limited(g)) { bytes[i >> 3] |= 1 << (i & 7); digits += "-" + code; }   // sessions / side on a channel not added
+        else if (limKey(g) !== curLim(g)) { bytes[i >> 3] |= 1 << (i & 7); digits += "-" + code; }   // a changed limit on a channel not added (the bot keeps the others as saved)
       });
       var m = btoa(String.fromCharCode.apply(null, bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
       return "z" + (tgt ? String(PCODE[tgt.sec]) : "0") + String((top ? 1 : 0) + (xon ? 2 : 0)) + T.fp + "_" + digits + "_" + m;
@@ -1657,7 +1657,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     // --- 3. the list: search, filter tabs, more columns ---
     var q = "", filt = "all", more = false;
     var search = el("input", { type: "search", placeholder: "Search channels…", "aria-label": "Search channels", on: { input: function (e) { q = e.target.value.toLowerCase(); update(); } } });
-    var FILTERS = [["all", "All 50"], ["copied", "Copied"], ["top", "Top " + N], ["extra", "Extra"], ["mine", "My channels"], ["qual", "Would qualify"], ["never", "Never"]];
+    var FILTERS = [["all", "All " + rows.length], ["copied", "Copied"], ["top", "Top " + N], ["extra", "Extra"], ["mine", "My channels"], ["qual", "Would qualify"], ["never", "Never"]];
     var filtBtns = FILTERS.map(function (f) { return el("button", { type: "button", cls: "segb small", on: { click: function () { filt = f[0]; update(); } } }, [f[1]]); });
     var moreBox = el("input", { type: "checkbox", on: { change: function (e) { more = e.target.checked; update(); } } });
     var tools = el("div", { cls: "tool" }, [search, el("div", { cls: "seg", style: "margin:0" }, filtBtns), el("label", { cls: "note" }, [moreBox, " More columns"])]);
@@ -1792,7 +1792,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     }
     var now = "Now: " + describe(curTop, curXon, K(), curMine ? cur.length : 0, curX.length) + (by ? ", by " + by : "") + (at ? ", " + when(at) : "") + ".";
     var help = el("details", { cls: "note", style: "margin-top:10px" }, [el("summary", { text: "How this list works" }),
-      el("p", { style: "max-width:90ch", text: "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + "). This week’s top " + N + " come first, then the strong candidates (Extra #1, #2 …), then the channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") by Best of 10’s score (net R × win rate on every TP, " + (B.scores_basis || "last week") + "). " +
+      el("p", { style: "max-width:90ch", text: (T.basis === "best10" ? "Best of 10’s own ranking: the 50 best channels by its score (net R × win rate on every TP, " + (B.scores_basis || "last week") + "), plus this week’s top " + N + ", the strong candidates and any channel in a saved choice when they are not among them (“28-day R” and “Votes” are the consensus’s)." :
+        "The consensus ranking’s top 50 (28-day net R, week of " + (T.week_start ? dateOnly(T.week_start) : "–") + ").") + " This week’s top " + N + " come first, then the strong candidates (Extra #1, #2 …), then the channels that would qualify for the ranking (" + minSig + "+ signals, positive" + (minWin ? ", win rate " + Math.round(minWin * 100) + "%+" : "") + ") by Best of 10’s score (net R × win rate on every TP, " + (B.scores_basis || "last week") + "). " +
         "“+ Add” makes a channel one of yours (the tab switches to one with “My channels”); “Never” leaves a channel out even when it ranks or is a strong candidate, and the next best takes its place. " +
         "Sessions and Side work on every copied channel (top " + N + ", Extra or yours): lit = copied; a limit stays with the channel by name, so it applies whenever the channel is copied, also after Monday’s re-rank. Sessions are by when the channel posts, London time: Asia 22:00–07:00 (01:00–10:00 Nairobi), London 07:00–12:00 (10:00–15:00), London + New York 12:00–17:00 (15:00–20:00), New York 17:00–22:00 (20:00–01:00); the numbers are the last 28 days’ R in each. " +
         "How many Extra: " + (tgt ? tgt.label + "’s setting under Strategies (“Strong candidates (extra)”), sent with “Send settings”." : "best3.ini [best10] extra_channels.") + " Changes are sent through the tracker’s bot: tap Start, then Apply. " +
@@ -1801,7 +1802,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var body = el("div", null, [
       el("div", { cls: "seg", role: "radiogroup", "aria-label": "What Best of 10 copies" }, tabBtns), modeHelp, summary,
       tgt && !tgt.on ? el("p", { cls: "note", style: "color:var(--loss);margin:-6px 0 12px", text: "Best of 10 is off on " + tgt.label + ": these channels trade once it is switched on under Strategies." }) : null,
-      goneP.length || goneX.length ? el("p", { cls: "note", text: "No longer in this week’s top 50 (kept until you send a new choice, then dropped): " + goneP.concat(goneX.map(function (g) { return g + " (never)"; })).join(", ") + "." }) : null,
+      goneP.length || goneX.length ? el("p", { cls: "note", text: "No longer in the list (kept until you send a new choice, then dropped): " + goneP.concat(goneX.map(function (g) { return g + " (never)"; })).join(", ") + "." }) : null,
       tools, el("div", { cls: "scroll" }, [tbl]), noRows, help, ownBar]);
     return block(tgt ? "Best of 10 channels: " + tgt.label : "Best of 10 channels on the Sandbox", "Choose what Best of 10 copies with the tabs, set sessions and buys/sells for any copied channel, add your own and leave out any you never want. " + now, body);
   }
