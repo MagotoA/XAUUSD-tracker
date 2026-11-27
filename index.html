@@ -3204,6 +3204,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     ["ny_pause", "I", "bool", "New York pause", "No new orders from any strategy 13:00 – 18:00 Nairobi (05:00 – 10:00 New York: London afternoon, US data and the New York open), so the market can settle. On by default; switch it off to trade through it. Open trades keep their stop and target."],
     // 26 Nov 2026 (owner: "Yes, add it"): Best of 10's limit per channel; code "Mc" (every capital letter is taken)
     ["best10_extra", "Ex", "int", "Strong candidates (extra)", "Best of 10: how many strong candidates (the best 8-week records outside this week’s top 10, positive, 8+ signals) this account copies when “Extra” is ticked in its channel choice. 0 = none, 0 – 10."],
+    ["best10_one_signal", "Os", "bool", "One signal at a time per channel", "Best of 10: a channel’s new signal is not copied while its last copied signal still has a position or a waiting order (one channel can’t have two signals running at once)."],
+    ["best10_day_losses", "Dl", "int", "Channel off for the day after", "Best of 10: a channel with this many of today’s copied signals closed at a loss is not copied again until midnight (Nairobi). 0 = off, 0 – 10."],
+    ["best10_channel_gap", "Gp", "int", "Minutes between signals of one channel", "Best of 10: after a channel’s signal is copied, its next signals posted within this many minutes are not copied (so one channel can’t stack trades). 0 = off, 0 – 240."],
     ["best10_max_per_channel", "Mc", "int", "Max open per channel", "Best of 10: at most this many positions and waiting orders from any one channel at once; a new signal takes only the room left, nearest TPs first. 0 = no limit. 0 – 20. The account’s Max open trades still applies on top."]];
   // the Settings tab's layout (23 Nov 2026, Arnold's sheet: "The settings tab..should appear in a similar format.
   // Reorganise/group appropriately"; chose "Layout now, new rules next"): General = the whole account, Live 1 / 2 / 3
@@ -3229,6 +3232,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       function () { return "Voting channels (2+ agree)"; }, function () { return "Follows the consensus"; }, "best10_top"],
     ["Strong candidates (extra)", "Best of 10: how many strong candidates the account copies when “Extra” is ticked in Best of 10 channels below (the best 8-week records outside this week’s top 10: positive, 8+ signals, worked out every week; a channel marked Never is skipped and the next one taken). 0 = none, 0 – 10.",
       function () { return "–"; }, function () { return "–"; }, "best10_extra"],
+    ["One signal at a time per channel", "Best of 10: while a channel’s last copied signal still has a position or a waiting order, its new signals are not copied, so one channel never has two signals running at once. Replay (12 weeks, 12 open, with the 2-loss stop): 2% less profit, drawdown $226 → $242.",
+      function () { return "One per consensus"; }, function () { return "–"; }, "best10_one_signal"],
+    ["Channel off for the day after", "Best of 10: once this many of a channel’s signals copied today have closed at a loss, its next signals are not copied until midnight (Nairobi), so a channel on a bad streak can’t keep stacking losses. 0 = off, 0 – 10. Replay (12 weeks, 12 open): 2 losing signals cut the worst drawdown $256 → $226 and the worst day −$156 → −$135 for 3% less profit (the 1-hour rule it replaces made 9% less).",
+      function () { return "–"; }, function () { return "–"; }, "best10_day_losses"],
     ["Max open per channel", "Best of 10: at most this many positions and waiting orders from one channel at once (a signal with more TPs than the room left copies the nearest TPs). 0 = no limit, 0 – 20. Max open trades (Account, above) still caps the whole account. Consensus and ladder: one trade per consensus.",
       function () { return "One per consensus"; }, function () { return "One per consensus"; }, "best10_max_per_channel"],
     ["What Best of 10 copies", "Chosen with the tabs in Best of 10 channels below: the weekly top 10, the strong candidates (Extra, how many: the row above) and channels of your own, in any mix; sessions and buys/sells can be set for any copied channel there. The mid-week pause and the channel rules apply to your own channels unless the next row is off.",
@@ -3267,6 +3274,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (key === "stop_usd" || key === "ladder_stop") return "$" + (+x);
     if (key === "best10_max_per_channel" && !+x) return "no limit";
     if (key === "best10_extra" && !+x) return "none";
+    if (key === "best10_channel_gap") return +x ? (+x) + " min" : "off";
+    if (key === "best10_day_losses") return +x ? (+x) + " losing signals" : "off";
     var mins = ["news_min", "ladder_news", "best10_news", "cooldown_min", "max_delay"];
     if ((key === "week_limit" || key === "max_risk" || mins.indexOf(key) >= 0 && key !== "max_delay") && !+x) return "off";
     if (key === "day_limit" || key === "week_limit" || key === "max_risk") return (+x) + "%";
@@ -3319,6 +3328,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if ("max_risk" in cur) glance.push(["Risk per order", cur.max_risk + "%"]);
     if ("day_limit" in cur) glance.push(["Daily loss limit", cur.day_limit + "%"]);
     if ("best10_max_per_channel" in cur) glance.push(["Per channel", cur.best10_max_per_channel || "No limit"]);
+    if ("best10_day_losses" in cur) glance.push(["Channel stop", +cur.best10_day_losses ? "after " + cur.best10_day_losses + " losses" : "Off"]);
+    if ("best10_one_signal" in cur) glance.push(["One signal / channel", cur.best10_one_signal ? "On" : "Off"]);
     glance.push(["Best of 10", b10Now]);
     v.appendChild(kpiRow(glance));
     var JUMPS = [["set-acct", "Account"], ["set-strat", "Strategies"], ["set-b10", "Best of 10 channels"], ["set-help", "Reset & help"]];
@@ -3357,7 +3368,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         var unit = f[2] === "usd" ? "$" : "";
         var inp = el("input", { type: "number", step: f[2] === "usd" ? "0.5" : "1", style: "width:5em", "aria-label": f[3], on: { input: function (e) { want[key] = e.target.value; update(); } } });
         inp.value = want[key] == null ? "" : String(want[key]);
-        var suf = /_limit$|max_risk/.test(key) ? " %" : /_min$|max_delay|_news$/.test(key) ? " min" : "";
+        var suf = /_limit$|max_risk/.test(key) ? " %" : /_min$|max_delay|_news$|_gap$/.test(key) ? " min" : "";
         ctl = el("span", null, [unit, inp, suf]);
       }
       var n = note(key);
@@ -3445,6 +3456,8 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (!(+want.max_open >= 1 && +want.max_open <= 20)) bad.push("Max open trades must be 1 – 20.");
       if (ch.indexOf("best10_top") >= 0 && !(+want.best10_top >= 1 && +want.best10_top <= 10)) bad.push("Channels to copy must be 1 – 10.");
       if (ch.indexOf("best10_extra") >= 0 && !(+want.best10_extra >= 0 && +want.best10_extra <= 10)) bad.push("Strong candidates must be 0 – 10.");
+      if (ch.indexOf("best10_channel_gap") >= 0 && !(+want.best10_channel_gap >= 0 && +want.best10_channel_gap <= 240)) bad.push("Minutes between signals of one channel must be 0 – 240.");
+      if (ch.indexOf("best10_day_losses") >= 0 && !(+want.best10_day_losses >= 0 && +want.best10_day_losses <= 10)) bad.push("Channel off for the day after must be 0 – 10 losing signals.");
       if (pk.refresh && +want.best10_extra !== lastK) { lastK = +want.best10_extra; pk.refresh(); return; }   // the Extra tabs follow the number
       if (ch.indexOf("ladder_lots") >= 0 && want.ladder_lots !== "auto" && !(+want.ladder_lots >= 0.01 && +want.ladder_lots <= maxL)) bad.push("Ladder lots must be 0.01 – " + maxL + ".");
       if (ch.indexOf("ladder_news") >= 0 && !(+want.ladder_news >= 0 && +want.ladder_news <= 120)) bad.push("Ladder news filter must be 0 – 120 min.");
