@@ -464,11 +464,11 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function rawPool() { return LEGS.filter(function (t) { return state.bf || t.source !== "backfill"; }); }   // no filters (the tabs' counts)
   function pool(o) {   // the channels' positions that pass the filter bar (o.anyChannel: every channel, for one channel's own page)
     var k = "p" + (o && o.anyChannel ? 1 : 0);
-    return MEMO[k] || (MEMO[k] = LEGS.filter(function (t) { return (state.bf || t.source !== "backfill") && legOK(t, o); }));
+    return MEMO[k] || (MEMO[k] = LEGS.filter(function (t) { return (state.bf || t.source !== "backfill") && t.grp !== OWN && legOK(t, o); }));
   }
   function sigPool(o) {
     var k = "s" + (o && o.anyChannel ? 1 : 0);
-    return MEMO[k] || (MEMO[k] = SIGS.filter(function (t) { return (state.bf || t.source !== "backfill") && sigOK(t, o); }));
+    return MEMO[k] || (MEMO[k] = SIGS.filter(function (t) { return (state.bf || t.source !== "backfill") && t.grp !== OWN && sigOK(t, o); }));
   }
 
   // ---------- filters (the bar under the tabs, since 18 Nov 2026): one period, channels, side, result and strategy for every tab ----------
@@ -638,7 +638,10 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
   function isIncomplete(t) { return t.incomplete || t.status === "incomplete"; }
   function isScored(t) { return !isIncomplete(t) && t.status !== "superseded"; }
   function distinct(rows) { return new Set(rows.map(function (t) { return t.trade_id || t.id; })).size; }
-  function channels() { return Array.from(new Set(LEGS.map(function (t) { return t.grp; }))).sort(); }
+  // the tracker's own setups are scored under the name "Own signals"; they have their own page (Sandbox > Own signals) and
+  // are not a Telegram channel, so the channel lists and totals leave them out (27 Nov 2026 audit)
+  var OWN = "Own signals";
+  function channels() { return Array.from(new Set(LEGS.filter(function (t) { return t.grp !== OWN; }).map(function (t) { return t.grp; }))).sort(); }
 
   function metrics(rows) {
     var sc = rows.filter(isScored);
@@ -951,7 +954,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var at = DATA.alltime, scope = state.bf ? "all" : "live";
     if (!at) return null;
     var list = Object.keys(at).map(function (g) { return { g: g, c: at[g].consensus ? 1 : 0, x: at[g][scope] }; })
-      .filter(function (r) { return r.x && r.x.signals && chanOK(r.g); })
+      .filter(function (r) { return r.x && r.x.signals && r.g !== OWN && chanOK(r.g); })
       .sort(function (a, b) { return (b.c - a.c) || (b.x.total_r - a.x.total_r); });
     if (!list.length) return null;
     var first = list.map(function (r) { return r.x.first; }).filter(Boolean).sort()[0];
@@ -1107,7 +1110,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
       v.appendChild(block("Your MT5 auto-trades", "Orders the tracker placed in MT5 for consensus signals, with the broker’s actual results." + (fx().any || sg ? " Only orders that pass the filters above." : ""),
         el("div", null, [
-          el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["Orders placed", placed.length], ["Closed", done.length], ["Win rate", pct(wins, done.length)],
+          el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["Orders placed", placed.length], ["Closed", done.length], ["Win rate", winRate(done)],
             ["Net profit", money(net)], ["Open or pending", at.filter(function (x) { return x.status === "Open" || x.status === "Pending"; }).length],
             ["Not taken", at.filter(function (x) { return x.status === "Skipped" || x.status === "Failed" || x.status === "Cancelled"; }).length]].map(function (k) {
             return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "Net profit" ? cls(net) : "", text: String(k[1]) })]); })),
@@ -1228,7 +1231,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var money = function (x) { return (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
       var mc = function (x, n) { return n ? el("span", { cls: x > 0 ? "win" : x < 0 ? "loss" : "", text: money(x) }) : "–"; };
       var open = rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting" || x.status === "Pending"; }).length;
-      return [name, where, lots, since(rows), done.length, pct(done.filter(function (x) { return x.profit > 0; }).length, done.length),
+      return [name, where, lots, since(rows), done.length, winRate(done),
         avgR == null || fx().any ? "–" : signed(avgR, 2) + "R", mc(net, done.length)].concat(fx().period ? [] : [mc(sum(w.map(function (x) { return x.profit; })), w.length)], [open]);
     };
     var rows = [];
@@ -1274,7 +1277,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : "Their orders are on the demo MT5" + (rows.length ? "" : " (not published on the website; the tracker’s own scoring is below)") + ". ") +
       "Never copied to a live account. MT5 results are the broker’s; “scored” is the tracker’s own scoring of the same signals (channel “Own signals”)." }));
     v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["MT5 orders placed", rows.filter(function (x) { return x.ticket; }).length], ["MT5 closed", done.length],
-      ["MT5 win rate", pct(done.filter(function (x) { return x.profit > 0; }).length, done.length)], ["MT5 net", done.length ? money(net) : "–"],
+      ["MT5 win rate", winRate(done)], ["MT5 net", done.length ? money(net) : "–"],
       ["Scored positions", lr.length], ["Scored win rate", pct(lw, lr.length)], ["Avg R (scored)", lr.length ? signed(sum(lr.map(function (l) { return l.r_multiple; })) / lr.length, 2) + "R" : "–"]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "MT5 net" ? cls(net) : "", text: String(k[1]) })]); })));
     ownStatus(v);
@@ -1297,14 +1300,14 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var done = rows.filter(function (x) { return x.profit != null && x.exit_time; }), net = sum(done.map(function (x) { return x.profit; }));
     var isL = function (x) { return /ladder/i.test(x.kind || "") || x.tag === "ladder"; };
     var money = function (x) { return x == null ? "" : (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x).toFixed(2) + " " + cur; };
-    var part = function (f) { var d = done.filter(f); return [d.length, pct(d.filter(function (x) { return x.profit > 0; }).length, d.length), d.length ? money(sum(d.map(function (x) { return x.profit; }))) : "–"]; };
+    var part = function (f) { var d = done.filter(f); return [d.length, winRate(d), d.length ? money(sum(d.map(function (x) { return x.profit; }))) : "–"]; };
     var c1 = part(function (x) { return !isL(x); }), l1 = part(isL);
     v.appendChild(el("p", { cls: "note", style: "margin-bottom:14px;max-width:80ch", text:
       "The tracker’s consensus and ladder orders, traded on the Sandbox demo (" + (cs.server || "") + ", account " + (cs.account || "") + ") with TEST rules before they reach the live accounts: " +
       (cs.rules || "") + ". " + (cs.new_orders === false ? "New orders are paused. " : "") +
       "The live accounts and the Pepperstone demo run the live rules (Live account tab); compare the two to decide what to ship." }));
     v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [["Orders placed", rows.filter(function (x) { return x.ticket; }).length], ["Closed", done.length],
-      ["Win rate", pct(done.filter(function (x) { return x.profit > 0; }).length, done.length)], ["Net", done.length ? money(net) : "–"],
+      ["Win rate", winRate(done)], ["Net", done.length ? money(net) : "–"],
       ["Consensus closed / won / net", c1[0] + " · " + c1[1] + " · " + c1[2]], ["Ladder closed / won / net", l1[0] + " · " + l1[1] + " · " + l1[2]]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[0] === "Net" ? cls(net) : "", text: String(k[1]) })]); })));
     v.appendChild(block("Consensus orders on the Sandbox", "Newest first. “Not taken” rows show why (cooldown, news, early ladder skip …).", rows.length ? table(
@@ -1364,7 +1367,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         : ["Balance", b.balance == null ? "–" : b.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + cur],
       fx().any ? ["Net (filtered)", done.length ? money(sumP(done)) : "–"] : ["This week net", wk.length ? money(sumP(wk)) : "–"],
       fx().any ? ["Closed (filtered)", done.length] : ["This week closed", wk.length],
-      fx().any ? ["Win rate (filtered)", pct(done.filter(function (x) { return x.profit > 0; }).length, done.length)] : ["Win rate (week)", pct(wk.filter(function (x) { return x.profit > 0; }).length, wk.length)],
+      fx().any ? ["Win rate (filtered)", winRate(done)] : ["Win rate (week)", winRate(wk)],
       ["Open or waiting", rows.filter(function (x) { return x.status === "Open" || x.status === "Waiting"; }).length],
       [fx().any ? "All-time net, no filters" : "All-time net", allRows.some(function (x) { return x.profit != null; }) ? money(sumP(allRows.filter(function (x) { return x.profit != null; }))) : "–"]].map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { text: String(k[1]) })]); })));
@@ -1478,7 +1481,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (fx().chans && !c.length && !(h.channels || []).concat(h.changed || [], h.monday_channels || []).some(function (g) { return fx().chans.has(g); })) return null;
       var mon = h.monday_channels && h.monday_channels.join(", ") !== (h.channels || []).join(", ") ? " → after Monday: " + (h.monday_channels.join(", ") || "none") : "";
       if (h.changed && h.changed.join(", ") !== (h.channels || []).join(", ")) mon = " → mid-week: " + (h.changed.join(", ") || "none");
-      return [h.week, ((h.channels || []).join(", ") || "–") + mon, c.length, pct(c.filter(function (x) { return x.profit > 0; }).length, c.length), c.length ? mcell(sumP(c)) : "–"];
+      return [h.week, ((h.channels || []).join(", ") || "–") + mon, c.length, winRate(c), c.length ? mcell(sumP(c)) : "–"];
     }).filter(Boolean);
     v.appendChild(block("Week by week", "", hist.length ? table(["Week of", "Channels", "Closed", "Win rate", "Net"], hist, { num: [2, 3, 4] }) : empty("No weeks yet.")));
     var pr = rows.filter(function (x) { return x.status === "Paused"; }).slice(0, 60);
@@ -1864,7 +1867,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     v.appendChild(el("dl", { cls: "kpis", style: "margin-bottom:14px" }, [
       fx().any ? ["Net (filtered)", done.length ? money(sumP(done)) : "–"] : ["This week net", wk.length ? money(sumP(wk)) : "–"],
       fx().any ? ["Closed (filtered)", done.length] : ["This week closed", wk.length],
-      [fx().any ? "Win rate (filtered)" : "Win rate (all)", !fx().any && cut ? pct(ks.wins, ks.closed) : pct(done.filter(function (x) { return x.profit > 0; }).length, done.length)],
+      [fx().any ? "Win rate (filtered)" : "Win rate (all)", !fx().any && cut ? pct(ks.wins, ks.closed) : winRate(done)],
       ["Avg R per position", fx().any ? (function () { var rr = done.filter(function (x) { return x.r != null; }); return rr.length ? signed(sum(rr.map(function (x) { return x.r; })) / rr.length, 2) + "R" : "–"; })()
         : k.summary && k.summary.avg_r != null ? signed(k.summary.avg_r, 2) + "R" : "–"],
       [fx().any ? "All-time net, no filters" : "All-time net", ks && ks.net != null ? money(ks.net) : allRows.some(function (x) { return x.profit != null; }) ? money(sumP(allRows.filter(function (x) { return x.profit != null; }))) : "–"],
@@ -1949,7 +1952,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var line = function (t, top) {
       return [top ? el("strong", { text: t.name }) : t.name,
         top ? "" : t.on ? "On" : el("span", { cls: "muted", text: "Off" + (t.last ? ", last order " + dateOnly(t.last) : "") }),
-        t.first ? dateOnly(t.first) : "–", t.done.length, pct(t.wins, t.done.length), mc(t.net, t.done.length),
+        t.first ? dateOnly(t.first) : "–", t.done.length, winRate(t.done), mc(t.net, t.done.length),
         t.done.length ? money(t.net / t.done.length) : "–"]
         .concat(per ? [] : [mc(t.weekNet, t.week.length), mc(t.todayNet, t.today.length)], [t.open, t.skipped]);
     };
@@ -1960,7 +1963,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var boxes = [["Balance", balance == null ? "–" : balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + (money.cur || ""), ""],
       [(sg ? "Net" : "Net, all strategies") + (fx().any || sg ? " (filtered)" : ""), t.done.length ? money(t.net) : "–", cls(t.net)]];
     if (!per) boxes.push(["Today", money(t.todayNet), cls(t.todayNet)], ["This week", money(t.weekNet), cls(t.weekNet)]);
-    boxes.push(["Closed positions", t.done.length, ""], ["Win rate", pct(t.wins, t.done.length), ""], ["Open or waiting", t.open, ""]);
+    boxes.push(["Closed positions", t.done.length, ""], ["Win rate", winRate(t.done), ""], ["Open or waiting", t.open, ""]);
     return el("dl", { cls: "kpis", style: "margin-bottom:14px" }, boxes.map(function (k) {
       return el("div", null, [el("dt", { text: k[0] }), el("dd", { cls: k[2], text: String(k[1]) })]); }));
   }
@@ -1984,7 +1987,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var acctLine = function (label, bal, t, ls, top) {
       var byK = {}; ls.forEach(function (st) { byK[st.key] = st; });
       return [top ? el("strong", { text: label }) : label, bal == null ? "–" : bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        t.done.length, pct(t.wins, t.done.length), mc(t.net, t.done.length)]
+        t.done.length, winRate(t.done), mc(t.net, t.done.length)]
         .concat(keys.map(function (k) { var st = byK[k]; if (!st) return "–"; var n = sum(st.done.map(function (x) { return x.profit; })); return mc(n, st.done.length); }))
         .concat(per ? [] : [mc(t.weekNet, t.week.length), mc(t.todayNet, t.today.length)]);
     };
@@ -2062,7 +2065,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
             " (only these are copied, whatever their ranking, the channel rules or the mid-week pause; last week’s ranking isn’t used)"
           : "This week’s channels: " + ((bb.ranking || []).join(", ") || "none")) +
         (pnk.length && !pk ? " (" + pnk.map(function (g) { return g + ": " + pn[g]; }).join("; ") + ")" : "") +
-        ". Closed: " + b3d.length + ", win rate " + pct(b3d.filter(function (x) { return x.profit > 0; }).length, b3d.length) + ", net " + (b3d.length ? money(b3net) : "–") +
+        ". Closed: " + b3d.length + ", win rate " + winRate(b3d) + ", net " + (b3d.length ? money(b3net) : "–") +
         ". Running profit of open positions shows in MT5." + (ps ? " Paused: a channel under its win-rate floor this week isn’t copied; its signals are tracked here as if they were trading (status Paused, the would-be result in brackets): " + ps + "." : ""),
         b3r.length ? table(
         ["Date", "Time", "Channel", "Side", "TP", "Status", "Profit", "Order", "Lots", "Entry", "SL", "TP price", "Exit", "Note"],
@@ -2093,7 +2096,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
         return [z.side === "buy" ? "Demand" : "Supply", fmt(z.lo, 2) + " – " + fmt(z.hi, 2), (z.side === "buy" ? "Buy" : "Sell") + " limit " + fmt(z.edge, 2),
           when(z.ready), when(z.expires), z.active ? el("strong", { text: z.why }) : z.why];
       })) : empty("No fresh zones right now. A zone forms after a 1-hour candle is followed by a strong move away from it.");
-      v.appendChild(block("Own signals", "The tracker’s own setups: a limit at the edge of a fresh 1-hour supply or demand zone when the 4-hour trend points the same way. Orders and results also appear above and under the channel “Own signals”.",
+      v.appendChild(block("Own signals", "The tracker’s own setups: a limit at the edge of a fresh 1-hour supply or demand zone when the 4-hour trend points the same way. Orders and results also appear above and on the Sandbox tab’s Own signals page.",
         el("div", null, [head, zt])));
     }
   }
@@ -2172,7 +2175,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       var k = nbYmd(r.t); days[k] = (days[k] || 0) + r.p;
     });
     var dv = Object.keys(days).map(function (k) { return days[k]; });
-    return { n: rows.length, wins: rows.filter(function (r) { return r.p > 0; }).length, net: sum(rows.map(function (r) { return r.p; })),
+    return { n: rows.length, wins: rows.filter(function (r) { return r.p > 0; }).length, decided: rows.filter(function (r) { return r.p !== 0; }).length, net: sum(rows.map(function (r) { return r.p; })),
       dd: dd, streak: streak, days: days, best: dv.length ? Math.max.apply(null, dv) : null, worst: dv.length ? Math.min.apply(null, dv) : null,
       today: sum(rows.filter(function (r) { return r.t >= d0; }).map(function (r) { return r.p; })),
       week: sum(rows.filter(function (r) { return r.t >= w0; }).map(function (r) { return r.p; })),
@@ -2183,11 +2186,11 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     if (!accts.length) { v.appendChild(empty("No live account reports yet.")); return; }
     var data = accts.map(function (a) { var rows = acctClosed(a); return { a: a, rows: rows, m: moneyStats(rows) }; });
     v.appendChild(el("p", { cls: "note", style: "margin:0 0 12px;max-width:85ch", text: "The live accounts’ real results (the broker’s profit after costs), every strategy together: consensus, ladder and Best of 10. Closed trades only; open positions show in MT5. The filters above (period, side, result, channels) apply." }));
-    v.appendChild(block("Accounts at a glance", "Drawdown = the biggest fall from a peak in the running total of closed trades; losing streak = losses in a row.",
+    v.appendChild(block("Accounts at a glance", "Win rate = won ÷ (won + lost): breakeven closes count as neither (here and on the Live account and Sandbox tabs). Drawdown = the biggest fall from a peak in the running total of closed trades; losing streak = losses in a row.",
       table(["Account", "Balance", "Closed", "Win rate", "Net", "This week", "Today", "Best day", "Worst day", "Max drawdown", "Losing streak"], data.map(function (d) {
         var m = d.m, bal = d.a.balance;
         return [d.a.label || d.a.section, bal == null ? "–" : "$" + bal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), m.n,
-          pct(m.wins, m.n), ucell(m.net), ucell(m.week), ucell(m.today), ucell(m.best), ucell(m.worst),
+          pct(m.wins, m.decided), ucell(m.net), ucell(m.week), ucell(m.today), ucell(m.best), ucell(m.worst),
           m.dd ? usd(-m.dd) + (bal ? " (" + Math.round(m.dd / bal * 100) + "% of balance)" : "") : "–", m.streak];
       }), { num: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], cls: "compact" })));
     var colors = ["var(--gold)", "#2F6FB0", "#8A4FB0", "var(--win)"];
@@ -2544,6 +2547,9 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     return el("p", { cls: "note", style: "margin:0 0 10px" }, ["Model check: on the signals the Sandbox’s Best of 10 copied this week, this model gives " + usd(model, 0) + " (" + ls.length +
       " positions); the broker’s result was " + usd(real, 0) + " (" + n + " positions). The model can’t see the price touching breakeven between two TPs or the exact fills, so it runs high: read its $ to compare channels, not as money."]);
   }
+  // win rate of the closes that won or lost (27 Nov 2026 audit: breakeven closes, profit 0, counted as not won and pulled
+  // win rates down): won / (won + lost); a breakeven close is neither
+  function winRate(rows) { var w = 0, l = 0; rows.forEach(function (x) { if (x.profit > 0) w++; else if (x.profit < 0) l++; }); return pct(w, w + l); }
   function minSignals() { var p = state.fp; return p === "today" || p === "yday" ? 1 : p === "week" || p === "lweek" || p === "7d" ? 2 : 3; }
   function hiddenNote(hid, stOf) {   // "Not shown: 4 channels with fewer signals (together +$12, +1.5R): A, B, ..." (null when none)
     if (!hid.length) return null;
