@@ -1679,7 +1679,20 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
       if (Object.keys(why).length) sumNow.appendChild(el("div", { cls: "note" }, ["Left out this week: " + Object.keys(why).map(function (w) { return why[w].length + " " + w + " (" + why[w].join(", ") + ")"; }).join("; ") +
         ". A left-out place is filled only by a stand-in that clears the stand-in bar; otherwise it stays empty."]));
     }
-    var summary = el("div", { cls: "panel", style: "margin-bottom:14px" }, [sumHead, sumChips, sumNever, sumNow]);
+    // the weekly split between the live accounts (channel_split.py, 28 Nov 2026, Arnold: "can you split the channels on
+    // our behalfs? We shall recheck the split thereafter and edit if necessary"): what it gave each account, while this
+    // account's choice is still the split's
+    var sumSplit = el("div", { style: "margin-top:8px" }), SP = tgt && tgt.split;
+    if (SP && SP.shares) {
+      var mineSplit = by === "Weekly split (Claude)";
+      sumSplit.appendChild(el("div", { style: "font-weight:600" }, ["Weekly split, week of " + SP.week + (SP.at ? " (" + (SP.rerank ? "updated after the Monday-close re-rank " : "made ") + when(SP.at) + ")" : "") +
+        (mineSplit ? "" : ": changed since by " + (by || "the owner"))]));
+      sumSplit.appendChild(el("div", { cls: "note" }, [Object.keys(SP.shares).map(function (l) { return l + ": " + (SP.shares[l].join(", ") || "none"); }).join(" · ")]));
+      sumSplit.appendChild(el("div", { cls: "note" }, ["Channels that often post the same moves go to different accounts, so the three accounts don’t all lose on the same move. " +
+        "Each account copies its own share (“My channels only”); the other accounts’ channels are “Never” here. Change it below as usual. After the Monday-close re-rank (Tuesday 02:00 Nairobi) the split is updated: channels that stay keep their account, dropped ones come off, newcomers are placed (an account changed by its owner is left as it is). The next split is made on Sunday 20:00 Nairobi from the new ranking." +
+        ((SP.kept || []).length ? " Kept from your own channels: " + SP.kept.join(", ") + "." : "")]));
+    }
+    var summary = el("div", { cls: "panel", style: "margin-bottom:14px" }, [sumHead, sumChips, sumNever, sumNow, sumSplit]);
     // --- 3. the list: search, filter tabs, more columns ---
     var q = "", filt = "all", more = false;
     var search = el("input", { type: "search", placeholder: "Search channels…", "aria-label": "Search channels", on: { input: function (e) { q = e.target.value.toLowerCase(); update(); } } });
@@ -3501,7 +3514,7 @@ body.locked main > :not(#unlock):not(#loading) { display: none; }
     var pk = { dirty: false, ok: false, text: "", send: null, undo: null }, settingsReady = false, pickBlock = null, lastK = null;
     if (DATA.top50 && (DATA.top50.rows || []).length) {
       pickBlock = b10Picker(DATA.top50, chanStatus, { sec: sec, label: a.label, picked: ap.picked || [], sessions: ap.sessions || {}, sides: ap.sides || {},
-        top: ap.top == null ? null : !!ap.top, extras: ap.extras == null ? null : !!ap.extras, exclude: ap.exclude || [],
+        top: ap.top == null ? null : !!ap.top, extras: ap.extras == null ? null : !!ap.extras, exclude: ap.exclude || [], split: ap.split || null,
         extraK: function () { return "best10_extra" in want ? +want.best10_extra : 0; }, changed_by: ap.changed_by, changed_at: ap.changed_at, on: cur.best10 !== false, topN: topN,
         ranking: (a.best10 && !a.best10.off && a.best10.ranking) || [],   // the account's own weekly top N (26 Nov 2026)
         effective: a.best10 && !a.best10.off ? a.best10.effective : null, out: (a.best10 && a.best10.out) || {},   // what it copies right now (27 Nov 2026)
